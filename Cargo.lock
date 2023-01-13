@@ -596,7 +596,6 @@ version = "1.0.0"
 dependencies = [
  "anyhow",
  "bs58",
- "chrono",
  "clap",
  "clickhouse",
  "inquire",

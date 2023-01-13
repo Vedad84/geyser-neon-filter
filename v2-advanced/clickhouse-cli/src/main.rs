@@ -31,14 +31,14 @@ async fn run_interactive(client: &Client) {
 
                 if let Ok(slot_or_hash) = answer {
                     let result =
-                        fetch_block_info(client, slot_or_hash.slot, slot_or_hash.hash).await;
+                        fetch_block_info(client, slot_or_hash.slot, &slot_or_hash.hash).await;
                     match result {
                         Ok(block_info) => {
                             let prettified_json =
-                                serde_json::to_string_pretty(&block_info).unwrap();
-                            println!("{:?}", prettified_json);
+                                serde_json::to_string_pretty(&block_info).expect("to_string_pretty is failed");
+                            println!("{}", prettified_json);
                         }
-                        Err(e) => panic!("Failed to execute get_block_info, error: {e}"),
+                        Err(e) => panic!("Failed to execute get_block_info with slot {:?} and hash {:?}, error: {e}", slot_or_hash.slot, slot_or_hash.hash),
                     }
                 }
             }

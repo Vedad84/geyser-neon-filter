@@ -51,8 +51,8 @@ impl FromStr for SlotOrHash {
     type Err = ParseSlotOrHashError;
 
     fn from_str(s: &str) -> Result<Self, ParseSlotOrHashError> {
-        let hash = bs58::decode(s).into_vec();
         let slot_number = s.parse::<u64>();
+        let hash = bs58::decode(s).into_vec();
 
         match (slot_number, hash) {
             (Ok(slot), Ok(_hash)) => Ok(SlotOrHash::from_slot_hash(slot, s.to_string())),
