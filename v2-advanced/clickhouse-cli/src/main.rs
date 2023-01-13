@@ -10,6 +10,7 @@ use inquire::CustomType;
 use inquire::Select;
 use parse::{SlotOrHash, SlotOrSignature, VersionOrSignature};
 
+use crate::db::fetch_update_slot;
 use crate::db::{fetch_block_info, fetch_transaction_info};
 
 async fn run_interactive(client: &Client) {
@@ -57,12 +58,28 @@ async fn run_interactive(client: &Client) {
                 {
                     let prettified_json = match fetch_update_account(client, vos.write_version, &vos.signature).await {
                         Ok(block_info) => serde_json::to_string_pretty(&block_info).expect("get_transaction_info to_string_pretty is failed"),
-                        Err(e) => panic!("Failed to execute get_update_account with slot {:?} and signature {:?}, error: {e}", vos.write_version, vos.signature),
+                        Err(e) => panic!("Failed to execute get_update_account with write_version {:?} and signature {:?}, error: {e}", vos.write_version, vos.signature),
                     };
                     println!("{}", prettified_json);
                 }
             }
-            "get_update_slot" => unimplemented!(),
+            "get_update_slot" => {
+                if let Ok(slot) =
+                    CustomType::<u64>::new("Enter slot number to receive update_account_info:")
+                        .with_error_message("Please type a valid slot value.")
+                        .prompt()
+                {
+                    let prettified_json = match fetch_update_slot(client, slot).await {
+                        Ok(block_info) => serde_json::to_string_pretty(&block_info)
+                            .expect("get_transaction_info to_string_pretty is failed"),
+                        Err(e) => panic!(
+                            "Failed to execute get_update_slot with slot {:?} error: {e}",
+                            slot
+                        ),
+                    };
+                    println!("{}", prettified_json);
+                }
+            }
 
             &_ => panic!("Wrong command"),
         }
@@ -73,9 +90,9 @@ async fn run_interactive(client: &Client) {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let app = Command::new("geyser-neon-filter")
+    let app = Command::new("clickhouse-cli")
         .version("1.0")
-        .about("Neonlabs filtering service")
+        .about("Neonlabs cli utility")
         .arg(
             Arg::new("interactive")
                 .default_value("true")

@@ -2,6 +2,7 @@ use anyhow::anyhow;
 use anyhow::Result;
 use clickhouse::{Client, Row};
 use serde::{Deserialize, Serialize};
+use serde_repr::{Deserialize_repr, Serialize_repr};
 
 #[derive(Debug, Default, Row, Serialize, Deserialize)]
 pub struct BlockInfo {
@@ -28,6 +29,22 @@ pub struct UpdateAccountInfo {
     slot: u64,
     is_startup: bool,
     retrieved_time: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize_repr, Deserialize_repr)]
+#[repr(u8)]
+pub enum SlotStatus {
+    Processed,
+    Rooted,
+    Confirmed,
+}
+
+#[derive(Debug, Row, Serialize, Deserialize)]
+pub struct UpdateSlot {
+    pub slot: u64,
+    pub parent: Option<u64>,
+    pub status: SlotStatus,
+    pub retrieved_time: String,
 }
 
 pub async fn fetch_block_info(
@@ -139,7 +156,15 @@ pub async fn fetch_update_account(
     }
 }
 
-#[allow(dead_code)]
-pub async fn fetch_update_slot(_client: &Client, _slot: Option<u64>) -> Result<BlockInfo> {
-    unimplemented!()
+pub async fn fetch_update_slot(client: &Client, slot: u64) -> Result<UpdateSlot> {
+    let query = "SELECT slot, parent, slot_status, toString(retrieved_time)
+    FROM events.update_slot_local
+    WHERE slot = ?
+    ";
+    client
+        .query(query)
+        .bind(slot)
+        .fetch_one::<UpdateSlot>()
+        .await
+        .map_err(anyhow::Error::msg)
 }
