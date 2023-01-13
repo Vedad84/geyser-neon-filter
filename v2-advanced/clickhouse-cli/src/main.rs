@@ -5,11 +5,12 @@ use core::panic;
 
 use clap::{Arg, Command};
 use clickhouse::{error::Result, Client};
+use db::fetch_update_account;
 use inquire::CustomType;
-use inquire::{InquireError, Select};
-use parse::SlotOrHash;
+use inquire::Select;
+use parse::{SlotOrHash, SlotOrSignature, VersionOrSignature};
 
-use crate::db::fetch_block_info;
+use crate::db::{fetch_block_info, fetch_transaction_info};
 
 async fn run_interactive(client: &Client) {
     let options: Vec<&str> = vec![
@@ -18,38 +19,55 @@ async fn run_interactive(client: &Client) {
         "get_update_account",
         "get_update_slot",
     ];
-
-    let ans: Result<&str, InquireError> = Select::new("Choose the command", options).prompt();
-
-    match ans {
-        Ok(choice) => match choice {
+    if let Ok(choice) = Select::new("Choose the command", options).prompt() {
+        match choice {
             "get_block_info" => {
-                let answer =
+                if let Ok(soh) =
                     CustomType::<SlotOrHash>::new("Enter slot or hash to receive block json:")
                         .with_error_message("Please type a valid u64 value or bs58 string.")
-                        .prompt();
-
-                if let Ok(slot_or_hash) = answer {
-                    let result =
-                        fetch_block_info(client, slot_or_hash.slot, &slot_or_hash.hash).await;
-                    match result {
-                        Ok(block_info) => {
-                            let prettified_json =
-                                serde_json::to_string_pretty(&block_info).expect("to_string_pretty is failed");
-                            println!("{}", prettified_json);
-                        }
-                        Err(e) => panic!("Failed to execute get_block_info with slot {:?} and hash {:?}, error: {e}", slot_or_hash.slot, slot_or_hash.hash),
-                    }
+                        .prompt()
+                {
+                    let prettified_json = match fetch_block_info(client, soh.slot, &soh.hash).await {
+                        Ok(block_info) => serde_json::to_string_pretty(&block_info).expect("fetch_block_info to_string_pretty is failed"),
+                        Err(e) => panic!("Failed to execute get_block_info with slot {:?} and hash {:?}, error: {e}", soh.slot, soh.hash),
+                    };
+                    println!("{}", prettified_json);
                 }
             }
-
-            "get_transaction_info" => unimplemented!(),
-            "get_update_account" => unimplemented!(),
+            "get_transaction_info" => {
+                if let Ok(sos) = CustomType::<SlotOrSignature>::new(
+                    "Enter slot or signature to receive transaction_info json:",
+                )
+                .with_error_message("Please type a valid u64 value or signature array.")
+                .prompt()
+                {
+                    let prettified_json = match fetch_transaction_info(client, sos.slot, &sos.pubkey).await {
+                        Ok(block_info) => serde_json::to_string_pretty(&block_info).expect("get_transaction_info to_string_pretty is failed"),
+                        Err(e) => panic!("Failed to execute get_transaction_info with slot {:?} and signature {:?}, error: {e}", sos.slot, sos.pubkey),
+                    };
+                    println!("{}", prettified_json);
+                }
+            }
+            "get_update_account" => {
+                if let Ok(vos) = CustomType::<VersionOrSignature>::new(
+                    "Enter write_version or pubkey to receive update_account_info:",
+                )
+                .with_error_message("Please type a valid write_version value or signature array.")
+                .prompt()
+                {
+                    let prettified_json = match fetch_update_account(client, vos.write_version, &vos.signature).await {
+                        Ok(block_info) => serde_json::to_string_pretty(&block_info).expect("get_transaction_info to_string_pretty is failed"),
+                        Err(e) => panic!("Failed to execute get_update_account with slot {:?} and signature {:?}, error: {e}", vos.write_version, vos.signature),
+                    };
+                    println!("{}", prettified_json);
+                }
+            }
             "get_update_slot" => unimplemented!(),
 
             &_ => panic!("Wrong command"),
-        },
-        Err(_) => println!("There was an error, please try again"),
+        }
+    } else {
+        println!("There was an error, please try again");
     }
 }
 
