@@ -4,6 +4,10 @@ use clickhouse::{Client, Row};
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 
+use crate::parse::SlotOrHash;
+use crate::parse::SlotOrSignature;
+use crate::parse::VersionOrPubkey;
+
 #[derive(Debug, Default, Row, Serialize, Deserialize)]
 pub struct BlockInfo {
     block_json: String,
@@ -47,13 +51,30 @@ pub struct UpdateSlot {
     pub retrieved_time: String,
 }
 
-pub async fn fetch_block_info(
-    client: &Client,
-    slot: Option<u64>,
-    hash: &Option<String>,
-) -> Result<BlockInfo> {
+#[derive(Debug, Row, Serialize, Deserialize)]
+pub struct TableInfo {
+    pub database: String,
+    pub table: String,
+    pub rows: u64,
+    pub latest_modification: String,
+    pub disk_size: String,
+    pub primary_keys_size: String,
+    pub engine: String,
+    pub bytes_size: u64,
+    pub compressed_size: String,
+    pub uncompressed_size: String,
+    pub compression_ratio: f64,
+}
+
+#[derive(Debug, Row, Serialize, Deserialize)]
+pub struct TableRowCount {
+    pub table_name: String,
+    pub row_count: u64,
+}
+
+pub async fn fetch_block_info(client: &Client, soh: &SlotOrHash) -> Result<BlockInfo> {
     let query = "SELECT notify_block_json, toString(retrieved_time) FROM events.notify_block_local WHERE (slot = toUInt64(?) OR hash = toString(?))";
-    if let (Some(slot), Some(hash)) = (slot, hash) {
+    if let (Some(slot), Some(hash)) = (soh.slot, soh.hash.as_ref()) {
         client
             .query(query)
             .bind(slot)
@@ -61,7 +82,7 @@ pub async fn fetch_block_info(
             .fetch_one::<BlockInfo>()
             .await
             .map_err(anyhow::Error::msg)
-    } else if let Some(slot) = slot {
+    } else if let Some(slot) = soh.slot {
         client
             .query(query)
             .bind(slot)
@@ -69,7 +90,7 @@ pub async fn fetch_block_info(
             .fetch_one::<BlockInfo>()
             .await
             .map_err(anyhow::Error::msg)
-    } else if let Some(hash) = hash {
+    } else if let Some(hash) = &soh.hash {
         client
             .query(query)
             .bind(0)
@@ -84,12 +105,11 @@ pub async fn fetch_block_info(
 
 pub async fn fetch_transaction_info(
     client: &Client,
-    slot: Option<u64>,
-    signature: &Option<Vec<u8>>,
+    sos: &SlotOrSignature,
 ) -> Result<TransactionInfo> {
     let empty_vec: Vec<u8> = vec![];
     let query = "SELECT notify_transaction_json, toString(retrieved_time) FROM events.notify_transaction_local WHERE slot = ? OR signature = ?";
-    if let (Some(slot), Some(signature)) = (slot, signature) {
+    if let (Some(slot), Some(signature)) = (sos.slot, sos.signature.as_ref()) {
         client
             .query(query)
             .bind(slot)
@@ -97,7 +117,7 @@ pub async fn fetch_transaction_info(
             .fetch_one::<TransactionInfo>()
             .await
             .map_err(anyhow::Error::msg)
-    } else if let Some(slot) = slot {
+    } else if let Some(slot) = sos.slot {
         client
             .query(query)
             .bind(slot)
@@ -105,7 +125,7 @@ pub async fn fetch_transaction_info(
             .fetch_one::<TransactionInfo>()
             .await
             .map_err(anyhow::Error::msg)
-    } else if let Some(signature) = signature {
+    } else if let Some(signature) = &sos.signature {
         client
             .query(query)
             .bind(0)
@@ -120,14 +140,13 @@ pub async fn fetch_transaction_info(
 
 pub async fn fetch_update_account(
     client: &Client,
-    write_version: Option<u64>,
-    pubkey: &Option<Vec<u8>>,
+    vop: &VersionOrPubkey,
 ) -> Result<UpdateAccountInfo> {
     let empty_vec: Vec<u8> = vec![];
     let query = "SELECT pubkey, lamports, owner, executable, rent_epoch, data, write_version, txn_signature, slot, is_startup, toString(retrieved_time)
                 FROM events.update_account_local
                 WHERE write_version = ? OR pubkey = ?";
-    if let (Some(write_version), Some(pubkey)) = (write_version, pubkey) {
+    if let (Some(write_version), Some(pubkey)) = (vop.write_version, vop.pubkey.as_ref()) {
         client
             .query(query)
             .bind(write_version)
@@ -135,7 +154,7 @@ pub async fn fetch_update_account(
             .fetch_one::<UpdateAccountInfo>()
             .await
             .map_err(anyhow::Error::msg)
-    } else if let Some(write_version) = write_version {
+    } else if let Some(write_version) = vop.write_version {
         client
             .query(query)
             .bind(write_version)
@@ -143,7 +162,7 @@ pub async fn fetch_update_account(
             .fetch_one::<UpdateAccountInfo>()
             .await
             .map_err(anyhow::Error::msg)
-    } else if let Some(pubkey) = pubkey {
+    } else if let Some(pubkey) = &vop.pubkey {
         client
             .query(query)
             .bind(0)
@@ -165,6 +184,56 @@ pub async fn fetch_update_slot(client: &Client, slot: u64) -> Result<UpdateSlot>
         .query(query)
         .bind(slot)
         .fetch_one::<UpdateSlot>()
+        .await
+        .map_err(anyhow::Error::msg)
+}
+
+pub async fn fetch_table_info(client: &Client, table_name: &str) -> Result<Vec<TableInfo>> {
+    let query = "
+    SELECT
+    parts.*,
+    columns.compressed_size,
+    columns.uncompressed_size,
+    columns.compression_ratio
+FROM (
+    SELECT database,
+        table,
+        formatReadableSize(sum(data_uncompressed_bytes))          AS uncompressed_size,
+        formatReadableSize(sum(data_compressed_bytes))            AS compressed_size,
+        sum(data_compressed_bytes) / sum(data_uncompressed_bytes) AS compression_ratio
+    FROM system.columns
+    GROUP BY database, table
+) columns RIGHT JOIN (
+    SELECT database,
+           table,
+           sum(rows)                                            AS rows,
+           toString(max(modification_time))                     AS latest_modification,
+           formatReadableSize(sum(bytes))                       AS disk_size,
+           formatReadableSize(sum(primary_key_bytes_in_memory)) AS primary_keys_size,
+           any(engine)                                          AS engine,
+           sum(bytes)                                           AS bytes_size
+    FROM system.parts
+    WHERE active and table like concat(toString(?), '%')
+    GROUP BY database, table
+) parts ON ( columns.database = parts.database AND columns.table = parts.table )
+ORDER BY parts.bytes_size DESC
+";
+    client
+        .query(query)
+        .bind(table_name)
+        .fetch_all::<TableInfo>()
+        .await
+        .map_err(anyhow::Error::msg)
+}
+
+pub async fn fetch_row_count(client: &Client, table_name: &str) -> Result<TableRowCount> {
+    let query = "SELECT table, rows
+    FROM system.parts
+    WHERE table like ?";
+    client
+        .query(query)
+        .bind(table_name)
+        .fetch_one::<TableRowCount>()
         .await
         .map_err(anyhow::Error::msg)
 }

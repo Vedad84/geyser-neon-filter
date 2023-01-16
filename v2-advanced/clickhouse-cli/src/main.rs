@@ -8,8 +8,10 @@ use clickhouse::{error::Result, Client};
 use db::fetch_update_account;
 use inquire::CustomType;
 use inquire::Select;
-use parse::{SlotOrHash, SlotOrSignature, VersionOrSignature};
+use parse::{SlotOrHash, SlotOrSignature, VersionOrPubkey};
 
+use crate::db::fetch_row_count;
+use crate::db::fetch_table_info;
 use crate::db::fetch_update_slot;
 use crate::db::{fetch_block_info, fetch_transaction_info};
 
@@ -19,6 +21,8 @@ async fn run_interactive(client: &Client) {
         "get_transaction_info",
         "get_update_account",
         "get_update_slot",
+        "get_info_for_table",
+        "get_table_row_count",
     ];
     if let Ok(choice) = Select::new("Choose the command", options).prompt() {
         match choice {
@@ -28,9 +32,13 @@ async fn run_interactive(client: &Client) {
                         .with_error_message("Please type a valid u64 value or bs58 string.")
                         .prompt()
                 {
-                    let prettified_json = match fetch_block_info(client, soh.slot, &soh.hash).await {
-                        Ok(block_info) => serde_json::to_string_pretty(&block_info).expect("fetch_block_info to_string_pretty is failed"),
-                        Err(e) => panic!("Failed to execute get_block_info with slot {:?} and hash {:?}, error: {e}", soh.slot, soh.hash),
+                    let prettified_json = match fetch_block_info(client, &soh).await {
+                        Ok(block_info) => serde_json::to_string_pretty(&block_info)
+                            .expect("fetch_block_info to_string_pretty is failed"),
+                        Err(e) => panic!(
+                            "Failed to execute get_block_info with data {}, error: {e}",
+                            soh
+                        ),
                     };
                     println!("{}", prettified_json);
                 }
@@ -42,27 +50,33 @@ async fn run_interactive(client: &Client) {
                 .with_error_message("Please type a valid u64 value or signature array.")
                 .prompt()
                 {
-                    let prettified_json = match fetch_transaction_info(client, sos.slot, &sos.pubkey).await {
+                    let prettified_json = match fetch_transaction_info(client, &sos).await {
                         Ok(block_info) => serde_json::to_string_pretty(&block_info).expect("get_transaction_info to_string_pretty is failed"),
-                        Err(e) => panic!("Failed to execute get_transaction_info with slot {:?} and signature {:?}, error: {e}", sos.slot, sos.pubkey),
+                        Err(e) => panic!("Failed to execute get_transaction_info with slot {:?} and signature {:?}, error: {e}", sos.slot, sos.signature),
                     };
                     println!("{}", prettified_json);
                 }
             }
+
             "get_update_account" => {
-                if let Ok(vos) = CustomType::<VersionOrSignature>::new(
+                if let Ok(vop) = CustomType::<VersionOrPubkey>::new(
                     "Enter write_version or pubkey to receive update_account_info:",
                 )
                 .with_error_message("Please type a valid write_version value or signature array.")
                 .prompt()
                 {
-                    let prettified_json = match fetch_update_account(client, vos.write_version, &vos.signature).await {
-                        Ok(block_info) => serde_json::to_string_pretty(&block_info).expect("get_transaction_info to_string_pretty is failed"),
-                        Err(e) => panic!("Failed to execute get_update_account with write_version {:?} and signature {:?}, error: {e}", vos.write_version, vos.signature),
+                    let prettified_json = match fetch_update_account(client, &vop).await {
+                        Ok(block_info) => serde_json::to_string_pretty(&block_info)
+                            .expect("get_transaction_info to_string_pretty is failed"),
+                        Err(e) => panic!(
+                            "Failed to execute get_update_account with data {}, error: {e}",
+                            vop
+                        ),
                     };
                     println!("{}", prettified_json);
                 }
             }
+
             "get_update_slot" => {
                 if let Ok(slot) =
                     CustomType::<u64>::new("Enter slot number to receive update_account_info:")
@@ -71,10 +85,46 @@ async fn run_interactive(client: &Client) {
                 {
                     let prettified_json = match fetch_update_slot(client, slot).await {
                         Ok(block_info) => serde_json::to_string_pretty(&block_info)
-                            .expect("get_transaction_info to_string_pretty is failed"),
+                            .expect("get_update_slot to_string_pretty is failed"),
                         Err(e) => panic!(
                             "Failed to execute get_update_slot with slot {:?} error: {e}",
                             slot
+                        ),
+                    };
+                    println!("{}", prettified_json);
+                }
+            }
+
+            "get_info_for_table" => {
+                if let Ok(table_name) =
+                    CustomType::<String>::new("Enter the table name to receive table info:")
+                        .with_error_message("Please type a valid table name.")
+                        .prompt()
+                {
+                    let prettified_json = match fetch_table_info(client, &table_name).await {
+                        Ok(block_info) => serde_json::to_string_pretty(&block_info)
+                            .expect("get_info_for_table to_string_pretty is failed"),
+                        Err(e) => panic!(
+                            "Failed to execute get_info_for_table with table_name {} error: {e}",
+                            table_name
+                        ),
+                    };
+                    println!("{}", prettified_json);
+                }
+            }
+
+            "get_table_row_count" => {
+                if let Ok(table_name) =
+                    CustomType::<String>::new("Enter the table name to receive count of rows:")
+                        .with_error_message("Please type a valid table name.")
+                        .prompt()
+                {
+                    let prettified_json = match fetch_row_count(client, &table_name).await {
+                        Ok(block_info) => serde_json::to_string_pretty(&block_info)
+                            .expect("get_table_row_count to_string_pretty is failed"),
+                        Err(e) => panic!(
+                            "Failed to execute get_table_row_count with table_name {} error: {e}",
+                            table_name
                         ),
                     };
                     println!("{}", prettified_json);
@@ -88,20 +138,26 @@ async fn run_interactive(client: &Client) {
     }
 }
 
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread", worker_threads = 2)]
 async fn main() -> Result<()> {
     let app = Command::new("clickhouse-cli")
         .version("1.0")
         .about("Neonlabs cli utility")
         .arg(
             Arg::new("interactive")
-                .default_value("true")
-                .default_missing_value("true")
                 .short('i')
                 .required(false)
                 .long("interactive")
                 .value_parser(clap::value_parser!(bool))
                 .help("Run in interactive mode"),
+        )
+        .arg(
+            Arg::new("get_row_count")
+                .short('g')
+                .required(false)
+                .long("get_row_count")
+                .value_parser(clap::value_parser!(String))
+                .help("Get row count for specific table"),
         )
         .get_matches();
 
@@ -110,6 +166,16 @@ async fn main() -> Result<()> {
     if app.get_one::<bool>("interactive").is_some() {
         println!("Starting interactive mode...");
         run_interactive(&client).await;
+    }
+    if let Some(table_name) = app.get_one::<String>("get_row_count") {
+        match fetch_row_count(&client, table_name).await {
+            Ok(trc) => {
+                println!("{}", trc.row_count);
+            }
+            Err(e) => {
+                panic!("Failed to execute get_row_count, error: {e}");
+            }
+        }
     }
 
     Ok(())

@@ -66,28 +66,28 @@ impl FromStr for SlotOrHash {
 #[derive(Debug, Clone)]
 pub struct SlotOrSignature {
     pub slot: Option<u64>,
-    pub pubkey: Option<Vec<u8>>,
+    pub signature: Option<Vec<u8>>,
 }
 
 impl SlotOrSignature {
     pub fn from_slot_signature(slot: u64, pubkey: Vec<u8>) -> SlotOrSignature {
         SlotOrSignature {
             slot: Some(slot),
-            pubkey: Some(pubkey),
+            signature: Some(pubkey),
         }
     }
 
     pub fn from_slot(slot: u64) -> SlotOrSignature {
         SlotOrSignature {
             slot: Some(slot),
-            pubkey: None,
+            signature: None,
         }
     }
 
     pub fn from_signature(pubkey: Vec<u8>) -> SlotOrSignature {
         SlotOrSignature {
             slot: None,
-            pubkey: Some(pubkey),
+            signature: Some(pubkey),
         }
     }
 }
@@ -98,7 +98,7 @@ impl fmt::Display for SlotOrSignature {
             write!(f, "{}", slot)?;
         }
 
-        if let Some(signature) = self.pubkey.as_ref() {
+        if let Some(signature) = self.signature.as_ref() {
             write!(f, "{:#?}", signature)?;
         }
 
@@ -126,49 +126,49 @@ impl FromStr for SlotOrSignature {
 }
 
 #[derive(Debug, Clone)]
-pub struct VersionOrSignature {
+pub struct VersionOrPubkey {
     pub write_version: Option<u64>,
-    pub signature: Option<Vec<u8>>,
+    pub pubkey: Option<Vec<u8>>,
 }
 
-impl VersionOrSignature {
-    pub fn from_writev_signature(write_version: u64, signature: Vec<u8>) -> VersionOrSignature {
-        VersionOrSignature {
+impl VersionOrPubkey {
+    pub fn from_writev_signature(write_version: u64, pubkey: Vec<u8>) -> VersionOrPubkey {
+        VersionOrPubkey {
             write_version: Some(write_version),
-            signature: Some(signature),
+            pubkey: Some(pubkey),
         }
     }
 
-    pub fn from_write_v(write_version: u64) -> VersionOrSignature {
-        VersionOrSignature {
+    pub fn from_write_v(write_version: u64) -> VersionOrPubkey {
+        VersionOrPubkey {
             write_version: Some(write_version),
-            signature: None,
+            pubkey: None,
         }
     }
 
-    pub fn from_signature(signature: Vec<u8>) -> VersionOrSignature {
-        VersionOrSignature {
+    pub fn from_signature(pubkey: Vec<u8>) -> VersionOrPubkey {
+        VersionOrPubkey {
             write_version: None,
-            signature: Some(signature),
+            pubkey: Some(pubkey),
         }
     }
 }
 
-impl fmt::Display for VersionOrSignature {
+impl fmt::Display for VersionOrPubkey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(write_version) = self.write_version {
             write!(f, "{}", write_version)?;
         }
 
-        if let Some(signature) = self.signature.as_ref() {
-            write!(f, "{:#?}", signature)?;
+        if let Some(pubkey) = self.pubkey.as_ref() {
+            write!(f, "{:#?}", pubkey)?;
         }
 
         Ok(())
     }
 }
 
-impl FromStr for VersionOrSignature {
+impl FromStr for VersionOrPubkey {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, ParseError> {
@@ -179,12 +179,12 @@ impl FromStr for VersionOrSignature {
             .collect();
 
         match (write_version, signature) {
-            (Ok(write_version), Ok(signature)) => Ok(VersionOrSignature::from_writev_signature(
+            (Ok(write_version), Ok(pubkey)) => Ok(VersionOrPubkey::from_writev_signature(
                 write_version,
-                signature,
+                pubkey,
             )),
-            (Ok(write_version), Err(_)) => Ok(VersionOrSignature::from_write_v(write_version)),
-            (Err(_), Ok(signature)) => Ok(VersionOrSignature::from_signature(signature)),
+            (Ok(write_version), Err(_)) => Ok(VersionOrPubkey::from_write_v(write_version)),
+            (Err(_), Ok(pubkey)) => Ok(VersionOrPubkey::from_signature(pubkey)),
             (Err(_), Err(_)) => Err(ParseError),
         }
     }
