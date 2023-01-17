@@ -159,21 +159,32 @@ async fn main() -> Result<()> {
                 .value_parser(clap::value_parser!(String))
                 .help("Get row count for specific table"),
         )
+        .arg(
+            Arg::new("server")
+                .short('s')
+                .required(true)
+                .long("server")
+                .value_parser(clap::value_parser!(String))
+                .help("ClickHouse server:port to connect"),
+        )
         .get_matches();
 
-    let client = Client::default().with_url("http://localhost:8123");
+    if let Some(server) = app.get_one::<String>("server") {
+        let client = Client::default().with_url(server);
 
-    if app.get_one::<bool>("interactive").is_some() {
-        println!("Starting interactive mode...");
-        run_interactive(&client).await;
-    }
-    if let Some(table_name) = app.get_one::<String>("get_row_count") {
-        match fetch_row_count(&client, table_name).await {
-            Ok(trc) => {
-                println!("{}", trc.row_count);
-            }
-            Err(e) => {
-                panic!("Failed to execute get_row_count, error: {e}");
+        if app.get_one::<bool>("interactive").is_some() {
+            println!("Starting interactive mode...");
+            run_interactive(&client).await;
+        }
+
+        if let Some(table_name) = app.get_one::<String>("get_row_count") {
+            match fetch_row_count(&client, table_name).await {
+                Ok(trc) => {
+                    println!("{}", trc.row_count);
+                }
+                Err(e) => {
+                    panic!("Failed to execute get_row_count, error: {e}");
+                }
             }
         }
     }
