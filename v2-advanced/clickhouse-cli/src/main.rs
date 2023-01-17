@@ -28,7 +28,7 @@ async fn run_interactive(client: &Client) {
         match choice {
             "get_block_info" => {
                 if let Ok(soh) =
-                    CustomType::<SlotOrHash>::new("Enter slot or hash to receive block json:")
+                    CustomType::<SlotOrHash>::new("Enter either the slot or the hash to receive block json:")
                         .with_error_message("Please type a valid u64 value or bs58 string.")
                         .prompt()
                 {
@@ -45,7 +45,7 @@ async fn run_interactive(client: &Client) {
             }
             "get_transaction_info" => {
                 if let Ok(sos) = CustomType::<SlotOrSignature>::new(
-                    "Enter slot or signature to receive transaction_info json:",
+                    "Enter either the slot or the signature (in bs58 or plain array format) to receive transaction_info json:",
                 )
                 .with_error_message("Please type a valid u64 value or signature array.")
                 .prompt()
@@ -60,7 +60,7 @@ async fn run_interactive(client: &Client) {
 
             "get_update_account" => {
                 if let Ok(vop) = CustomType::<VersionOrPubkey>::new(
-                    "Enter write_version or pubkey to receive update_account_info:",
+                    "Enter either the write_version or the pubkey (in bs58 or plain array format) to receive update_account_info:",
                 )
                 .with_error_message("Please type a valid write_version value or signature array.")
                 .prompt()
@@ -79,7 +79,7 @@ async fn run_interactive(client: &Client) {
 
             "get_update_slot" => {
                 if let Ok(slot) =
-                    CustomType::<u64>::new("Enter slot number to receive update_account_info:")
+                    CustomType::<u64>::new("Enter the slot number to receive update_account_info:")
                         .with_error_message("Please type a valid slot value.")
                         .prompt()
                 {
@@ -97,7 +97,7 @@ async fn run_interactive(client: &Client) {
 
             "get_info_for_table" => {
                 if let Ok(table_name) =
-                    CustomType::<String>::new("Enter the table name to receive table info:")
+                    CustomType::<String>::new("Enter the table name to receive table information:")
                         .with_error_message("Please type a valid table name.")
                         .prompt()
                 {

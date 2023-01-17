@@ -110,11 +110,15 @@ impl FromStr for SlotOrSignature {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, ParseError> {
-        let slot_number = s.parse::<u64>();
-        let signature: Result<Vec<u8>, _> = s[1..s.len() - 1]
+        let slot_number: Result<u64, ParseError> = s.parse::<u64>().map_err(|_| ParseError);
+        let mut signature: Result<Vec<u8>, ParseError> = s[1..s.len() - 1]
             .split(',')
-            .map(|s| s.parse::<u8>())
+            .map(|s| s.parse::<u8>().map_err(|_| ParseError))
             .collect();
+
+        if signature.is_err() {
+            signature = bs58::decode(s).into_vec().map_err(|_| ParseError);
+        }
 
         match (slot_number, signature) {
             (Ok(slot), Ok(signature)) => Ok(SlotOrSignature::from_slot_signature(slot, signature)),
@@ -172,13 +176,17 @@ impl FromStr for VersionOrPubkey {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, ParseError> {
-        let write_version = s.parse::<u64>();
-        let signature: Result<Vec<u8>, _> = s[1..s.len() - 1]
+        let write_version = s.parse::<u64>().map_err(|_| ParseError);
+        let mut pubkey: Result<Vec<u8>, _> = s[1..s.len() - 1]
             .split(',')
-            .map(|s| s.parse::<u8>())
+            .map(|s| s.parse::<u8>().map_err(|_| ParseError))
             .collect();
 
-        match (write_version, signature) {
+        if pubkey.is_err() {
+            pubkey = bs58::decode(s).into_vec().map_err(|_| ParseError);
+        }
+
+        match (write_version, pubkey) {
             (Ok(write_version), Ok(pubkey)) => Ok(VersionOrPubkey::from_writev_signature(
                 write_version,
                 pubkey,
