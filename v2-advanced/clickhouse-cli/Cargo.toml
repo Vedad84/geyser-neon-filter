@@ -2,7 +2,7 @@
 name = "clickhouse-cli"
 version = "1.0.0"
 edition = "2021"
-description = "Neon geyser filter"
+description = "Clickhouse command line utility"
 authors = ["NeonLabs Maintainers <maintainers@neonlabs.org>"]
 
 [dependencies]
