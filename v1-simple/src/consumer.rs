@@ -40,6 +40,42 @@ pub fn get_counter(stats: &Arc<Stats>, message_type: MessageType) -> &Counter<u6
     }
 }
 
+pub async fn process_message<T>(
+    message: BorrowedMessage<'_>,
+    filter_tx: Sender<T>,
+    stats: Arc<Stats>,
+) where
+    T: for<'a> Deserialize<'a> + std::marker::Send + 'static + GetMessageType,
+{
+    if let Some(payload) = extract_from_message(&message) {
+        let type_name = std::any::type_name::<T>();
+        stats
+            .kafka_bytes_rx
+            .inner()
+            .fetch_add(payload.len() as u64, Ordering::Relaxed);
+
+        let result: serde_json::Result<T> = serde_json::from_str::<T>(payload);
+
+        tokio::spawn(async move {
+            match result {
+                Ok(event) => {
+                    let received = get_counter(&stats, event.get_type());
+                    if let Err(e) = filter_tx.send_async(event).await {
+                        error!("Failed to send the data {type_name}, error {e}");
+                    }
+                    received.inc();
+                }
+                Err(e) => {
+                    error!("Failed to deserialize {type_name} {e}");
+                    stats.kafka_errors_deserialize.inc();
+                }
+            }
+        });
+    } else {
+        error!("Extracted empty payload!");
+    }
+}
+
 pub async fn consumer<T>(
     config: Arc<FilterConfig>,
     topic: String,
@@ -75,32 +111,7 @@ pub async fn consumer<T>(
     loop {
         match consumer.recv().await {
             Ok(message) => {
-                if let Some(payload) = extract_from_message(&message) {
-                    stats
-                        .kafka_bytes_rx
-                        .inner()
-                        .fetch_add(payload.len() as u64, Ordering::Relaxed);
-
-                    let result: serde_json::Result<T> = serde_json::from_str(payload);
-                    let filter_tx = filter_tx.clone();
-                    let stats = stats.clone();
-
-                    tokio::spawn(async move {
-                        match result {
-                            Ok(event) => {
-                                let received = get_counter(&stats, event.get_type());
-                                if let Err(e) = filter_tx.send_async(event).await {
-                                    error!("Failed to send the data {type_name}, error {e}");
-                                }
-                                received.inc();
-                            }
-                            Err(e) => {
-                                error!("Failed to deserialize {type_name} {e}");
-                                stats.kafka_errors_deserialize.inc();
-                            }
-                        }
-                    });
-                }
+                process_message(message, filter_tx.clone(), stats.clone()).await;
             }
             Err(e) => {
                 stats.kafka_errors_consumer.inc();
