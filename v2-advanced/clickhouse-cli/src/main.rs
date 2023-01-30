@@ -40,7 +40,7 @@ async fn run_interactive(client: &Client) {
                             soh
                         ),
                     };
-                    println!("{}", prettified_json);
+                    println!("{prettified_json}");
                 }
             }
             "get_transaction_info" => {
@@ -54,7 +54,7 @@ async fn run_interactive(client: &Client) {
                         Ok(block_info) => serde_json::to_string_pretty(&block_info).expect("get_transaction_info to_string_pretty is failed"),
                         Err(e) => panic!("Failed to execute get_transaction_info with slot {:?} and signature {:?}, error: {e}", sos.slot, sos.signature),
                     };
-                    println!("{}", prettified_json);
+                    println!("{prettified_json}");
                 }
             }
 
@@ -73,7 +73,7 @@ async fn run_interactive(client: &Client) {
                             vop
                         ),
                     };
-                    println!("{}", prettified_json);
+                    println!("{prettified_json}");
                 }
             }
 
@@ -91,7 +91,7 @@ async fn run_interactive(client: &Client) {
                             slot
                         ),
                     };
-                    println!("{}", prettified_json);
+                    println!("{prettified_json}");
                 }
             }
 
@@ -109,7 +109,7 @@ async fn run_interactive(client: &Client) {
                             table_name
                         ),
                     };
-                    println!("{}", prettified_json);
+                    println!("{prettified_json}");
                 }
             }
 
@@ -127,7 +127,7 @@ async fn run_interactive(client: &Client) {
                             table_name
                         ),
                     };
-                    println!("{}", prettified_json);
+                    println!("{prettified_json}");
                 }
             }
 

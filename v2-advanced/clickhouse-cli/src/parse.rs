@@ -10,11 +10,11 @@ pub struct SlotOrHash {
 impl fmt::Display for SlotOrHash {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(slot) = self.slot {
-            write!(f, "{}", slot)?;
+            write!(f, "{slot}")?;
         }
 
         if let Some(hash) = self.hash.as_ref() {
-            write!(f, "{}", hash)?;
+            write!(f, "{hash}")?;
         }
 
         Ok(())
@@ -95,11 +95,11 @@ impl SlotOrSignature {
 impl fmt::Display for SlotOrSignature {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(slot) = self.slot {
-            write!(f, "{}", slot)?;
+            write!(f, "{slot}",)?;
         }
 
         if let Some(signature) = self.signature.as_ref() {
-            write!(f, "{:#?}", signature)?;
+            write!(f, "{signature:#?}")?;
         }
 
         Ok(())
@@ -161,11 +161,11 @@ impl VersionOrPubkey {
 impl fmt::Display for VersionOrPubkey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(write_version) = self.write_version {
-            write!(f, "{}", write_version)?;
+            write!(f, "{write_version}")?;
         }
 
         if let Some(pubkey) = self.pubkey.as_ref() {
-            write!(f, "{:#?}", pubkey)?;
+            write!(f, "{pubkey:#?}")?;
         }
 
         Ok(())
