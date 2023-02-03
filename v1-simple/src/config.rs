@@ -75,7 +75,7 @@ impl From<&GlobalLogLevel> for LevelFilter {
     }
 }
 
-pub fn env_build_config() -> (Config, FilterConfig) {
+pub fn env_build_config() -> (AppConfig, FilterConfig) {
     let filter_log_path = env::var("FILTER_LOG_PATH").expect("FILTER_LOG_PATH is not set");
     let bootstrap_servers = env::var("BOOTSTRAP_SERVERS").expect("BOOTSTRAP_SERVERS is not set");
     let kafka_consumer_group_id =
@@ -119,7 +119,9 @@ pub fn env_build_config() -> (Config, FilterConfig) {
     )
     .unwrap_or(GlobalLogLevel::Info);
 
-    let cfg = Config {
+    let filter_config_path = env::var("FILTER_CONFIG_PATH").expect("FILTER_CONFIG_PATH is not set");
+
+    let cfg = AppConfig {
         filter_log_path,
         bootstrap_servers,
         kafka_consumer_group_id,
@@ -137,6 +139,7 @@ pub fn env_build_config() -> (Config, FilterConfig) {
         prometheus_port,
         kafka_log_level,
         global_log_level,
+        filter_config_path,
     };
 
     let filter_cfg = FilterConfig {
@@ -147,8 +150,8 @@ pub fn env_build_config() -> (Config, FilterConfig) {
     (cfg, filter_cfg)
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Config {
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AppConfig {
     pub filter_log_path: String,
     pub bootstrap_servers: String,
     pub kafka_consumer_group_id: String,
@@ -166,4 +169,5 @@ pub struct Config {
     pub prometheus_port: String,
     pub kafka_log_level: LogLevel,
     pub global_log_level: GlobalLogLevel,
+    pub filter_config_path: String,
 }

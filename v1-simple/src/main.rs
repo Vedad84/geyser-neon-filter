@@ -1,5 +1,6 @@
 mod build_info;
 mod config;
+mod config_hot_reload;
 mod consumer;
 mod consumer_stats;
 mod db;
@@ -13,13 +14,14 @@ use std::sync::Arc;
 
 use crate::{
     build_info::get_build_info,
+    config_hot_reload::async_watch,
     consumer::consumer,
     consumer_stats::ContextWithStats,
     db::DbBlockInfo,
     filter::{block_filter, slot_filter},
 };
 use clap::{Arg, Command};
-use config::{env_build_config, Config};
+use config::{env_build_config, AppConfig};
 use crossbeam_queue::SegQueue;
 use db::{db_stmt_executor, initialize_db_client, DbAccountInfo};
 use fast_log::{
@@ -34,7 +36,7 @@ use log::info;
 use prometheus::start_prometheus;
 use tokio::fs;
 
-async fn run(mut config: Config, filter_config: FilterConfig) {
+async fn run(mut config: AppConfig, filter_config: FilterConfig) {
     let logger: &'static Logger = fast_log::init(fast_log::Config::new().console().file_split(
         &config.filter_log_path,
         LogSize::KB(512),
@@ -90,6 +92,8 @@ async fn run(mut config: Config, filter_config: FilterConfig) {
     let (filter_tx_slots, filter_rx_slots) = flume::unbounded::<UpdateSlotStatus>();
     let (filter_tx_block, filter_rx_block) = flume::unbounded::<NotifyBlockMetaData>();
 
+    let cfg_watcher = tokio::spawn(async_watch(config.clone()));
+
     let account_filter = tokio::spawn(account_filter(
         filter_config.clone(),
         db_account_queue.clone(),
@@ -137,7 +141,8 @@ async fn run(mut config: Config, filter_config: FilterConfig) {
         block_filter,
         slot_filter,
         db_stmt_executor,
-        prometheus
+        prometheus,
+        cfg_watcher
     );
 }
 

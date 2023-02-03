@@ -15,7 +15,7 @@ use rdkafka::{
 use serde::Deserialize;
 
 use crate::{
-    config::Config,
+    config::AppConfig,
     consumer_stats::{ContextWithStats, Stats},
 };
 
@@ -77,7 +77,7 @@ pub async fn process_message<T>(
 }
 
 pub async fn consumer<T>(
-    config: Arc<Config>,
+    config: Arc<AppConfig>,
     topic: String,
     filter_tx: Sender<T>,
     ctx_stats: ContextWithStats,
