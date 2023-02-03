@@ -6,6 +6,7 @@ mod db;
 mod db_inserts;
 mod db_statements;
 mod filter;
+mod filter_config;
 mod prometheus;
 
 use std::sync::Arc;
@@ -18,22 +19,23 @@ use crate::{
     filter::{block_filter, slot_filter},
 };
 use clap::{Arg, Command};
-use config::{env_build_config, FilterConfig};
+use config::{env_build_config, Config};
 use crossbeam_queue::SegQueue;
 use db::{db_stmt_executor, initialize_db_client, DbAccountInfo};
 use fast_log::{
     consts::LogSize,
     plugin::{file_split::RollingType, packer::LogPacker},
-    Config, Logger,
+    Logger,
 };
 use filter::account_filter;
+use filter_config::FilterConfig;
 use kafka_common::kafka_structs::{NotifyBlockMetaData, UpdateAccount, UpdateSlotStatus};
-use log::{error, info};
+use log::info;
 use prometheus::start_prometheus;
 use tokio::fs;
 
-async fn run(mut config: FilterConfig) {
-    let logger: &'static Logger = fast_log::init(Config::new().console().file_split(
+async fn run(mut config: Config, filter_config: FilterConfig) {
+    let logger: &'static Logger = fast_log::init(fast_log::Config::new().console().file_split(
         &config.filter_log_path,
         LogSize::KB(512),
         RollingType::All,
@@ -74,6 +76,7 @@ async fn run(mut config: FilterConfig) {
         .expect("notify_slot_topic is not present in config");
 
     let config = Arc::new(config);
+    let filter_config = Arc::new(filter_config);
 
     let db_account_queue: Arc<SegQueue<DbAccountInfo>> = Arc::new(SegQueue::new());
     let db_block_queue: Arc<SegQueue<DbBlockInfo>> = Arc::new(SegQueue::new());
@@ -88,7 +91,7 @@ async fn run(mut config: FilterConfig) {
     let (filter_tx_block, filter_rx_block) = flume::unbounded::<NotifyBlockMetaData>();
 
     let account_filter = tokio::spawn(account_filter(
-        config.clone(),
+        filter_config.clone(),
         db_account_queue.clone(),
         filter_rx_account,
     ));
@@ -151,28 +154,38 @@ async fn main() {
                 .value_name("Config path")
                 .help("Sets the path to the config file"),
         )
+        .arg(
+            Arg::new("filter-config")
+                .short('f')
+                .required(false)
+                .long("fconfig")
+                .value_name("Filter config path")
+                .help("Sets the path to the filter config"),
+        )
         .get_matches();
 
-    println!("{}", get_build_info());
-
-    if let Some(config_path) = app.get_one::<String>("config") {
-        println!("Trying to read the config file: {config_path}");
-
-        let contents = fs::read_to_string(config_path)
-            .await
-            .unwrap_or_else(|e| panic!("Failed to read config: {config_path}, error: {e}"));
-
-        let result: serde_json::Result<FilterConfig> = serde_json::from_str(&contents);
-        match result {
-            Ok(config) => {
-                run(config).await;
-            }
-            Err(e) => {
-                eprintln!("Failed to parse filter config, error {e}");
-                error!("Failed to parse filter config, error {e}");
-            }
+    let (app_config, filter_config) = match (
+        app.get_one::<String>("config"),
+        app.get_one::<String>("filter-config"),
+    ) {
+        (Some(config_path), Some(filter_config_path)) => {
+            let contents = fs::read_to_string(config_path)
+                .await
+                .unwrap_or_else(|e| panic!("Failed to read config: {config_path}, error: {e}"));
+            let app_config = serde_json::from_str(&contents)
+                .unwrap_or_else(|e| panic!("Failed to parse config: {config_path}, error: {e}"));
+            let contents = fs::read_to_string(filter_config_path)
+                .await
+                .unwrap_or_else(|e| {
+                    panic!("Failed to read filter config: {filter_config_path}, error: {e}")
+                });
+            let filter_config = serde_json::from_str(&contents).unwrap_or_else(|e| {
+                panic!("Failed to parse filter config: {filter_config_path}, error: {e}")
+            });
+            (app_config, filter_config)
         }
-    } else {
-        run(env_build_config()).await;
-    }
+        _ => env_build_config(),
+    };
+
+    run(app_config, filter_config).await;
 }

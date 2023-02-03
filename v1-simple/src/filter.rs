@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use crate::{
-    config::FilterConfig,
     db::{DbAccountInfo, DbBlockInfo},
+    filter_config::FilterConfig,
 };
 use anyhow::Result;
 use crossbeam_queue::SegQueue;
