@@ -9,10 +9,11 @@ use crossbeam_queue::SegQueue;
 use flume::Receiver;
 use kafka_common::kafka_structs::{NotifyBlockMetaData, UpdateAccount, UpdateSlotStatus};
 use log::{error, trace};
+use tokio::sync::RwLock;
 
 #[inline(always)]
 async fn check_account(
-    config: Arc<FilterConfig>,
+    config: Arc<RwLock<FilterConfig>>,
     account_queue: Arc<SegQueue<DbAccountInfo>>,
     update_account: &UpdateAccount,
     owner: &Vec<u8>,
@@ -20,8 +21,8 @@ async fn check_account(
 ) -> Result<()> {
     let owner = bs58::encode(owner).into_string();
     let pubkey = bs58::encode(pubkey).into_string();
-    if config.filter_include_pubkeys.contains(&pubkey)
-        || config.filter_include_owners.contains(&owner)
+    if config.read().await.filter_include_pubkeys.contains(&pubkey)
+        || config.read().await.filter_include_owners.contains(&owner)
     {
         account_queue.push(update_account.try_into()?);
         trace!(
@@ -34,7 +35,7 @@ async fn check_account(
 }
 
 async fn process_account_info(
-    config: Arc<FilterConfig>,
+    config: Arc<RwLock<FilterConfig>>,
     account_queue: Arc<SegQueue<DbAccountInfo>>,
     update_account: UpdateAccount,
 ) -> Result<()> {
@@ -65,7 +66,7 @@ async fn process_account_info(
 }
 
 pub async fn account_filter(
-    config: Arc<FilterConfig>,
+    config: Arc<RwLock<FilterConfig>>,
     account_queue: Arc<SegQueue<DbAccountInfo>>,
     filter_rx: Receiver<UpdateAccount>,
 ) {

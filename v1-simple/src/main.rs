@@ -34,7 +34,7 @@ use filter_config::FilterConfig;
 use kafka_common::kafka_structs::{NotifyBlockMetaData, UpdateAccount, UpdateSlotStatus};
 use log::info;
 use prometheus::start_prometheus;
-use tokio::fs;
+use tokio::{fs, sync::RwLock};
 
 async fn run(mut config: AppConfig, filter_config: FilterConfig) {
     let logger: &'static Logger = fast_log::init(fast_log::Config::new().console().file_split(
@@ -78,7 +78,7 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
         .expect("notify_slot_topic is not present in config");
 
     let config = Arc::new(config);
-    let filter_config = Arc::new(filter_config);
+    let filter_config = Arc::new(RwLock::new(filter_config));
 
     let db_account_queue: Arc<SegQueue<DbAccountInfo>> = Arc::new(SegQueue::new());
     let db_block_queue: Arc<SegQueue<DbBlockInfo>> = Arc::new(SegQueue::new());
@@ -92,7 +92,7 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
     let (filter_tx_slots, filter_rx_slots) = flume::unbounded::<UpdateSlotStatus>();
     let (filter_tx_block, filter_rx_block) = flume::unbounded::<NotifyBlockMetaData>();
 
-    let cfg_watcher = tokio::spawn(async_watch(config.clone()));
+    let cfg_watcher = tokio::spawn(async_watch(config.clone(), filter_config.clone()));
 
     let account_filter = tokio::spawn(account_filter(
         filter_config.clone(),
