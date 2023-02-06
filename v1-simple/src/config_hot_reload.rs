@@ -37,25 +37,37 @@ where
     }
 }
 
+fn print_rows<T: Debug>(elements: impl IntoIterator<Item = T>) {
+    let mut count = 0;
+    let mut output = String::new();
+    for item in elements {
+        output.push_str(&format!("   {item:?}"));
+        count += 1;
+        if count % 4 == 0 {
+            output.push('\n');
+        }
+    }
+
+    if count % 4 != 0 {
+        output.push('\n');
+    }
+
+    info!("{}", output);
+}
+
 fn log_diff<T, S>(hashset_diff: HDiff<T, S>)
 where
     T: Eq + Hash + Debug,
     S: std::hash::BuildHasher,
 {
     info!("[+] Elements added in the updated configuration:");
-    for item in hashset_diff.added {
-        info!("\t{item:#?}");
-    }
+    print_rows(hashset_diff.added);
 
     info!("[-] Elements missing in the old configuration compared to the new one:");
-    for item in hashset_diff.removed {
-        info!("\t{item:#?}");
-    }
+    print_rows(hashset_diff.removed);
 
     info!("[=] Elements that remain the same in both configurations:");
-    for item in hashset_diff.unchanged {
-        info!("\t{item:#?}");
-    }
+    print_rows(hashset_diff.unchanged);
 }
 
 async fn async_watcher() -> notify::Result<(RecommendedWatcher, Receiver<notify::Result<Event>>)> {
