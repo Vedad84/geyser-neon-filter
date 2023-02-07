@@ -6,12 +6,12 @@ use notify::{
     event::{DataChange, ModifyKind},
     Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher,
 };
-use tokio::sync::RwLock;
 use std::collections::hash_set::{Difference, Intersection};
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::sync::Arc;
 use tokio::sync::mpsc::{channel, Receiver};
+use tokio::sync::RwLock;
 
 struct HDiff<'a, T: 'a + Eq + Hash, S: std::hash::BuildHasher> {
     added: Difference<'a, T, S>,
@@ -59,11 +59,12 @@ fn print_rows<T: Debug>(elements: impl IntoIterator<Item = T>) {
     }
 }
 
-fn log_diff<T, S>(hashset_diff: HDiff<T, S>)
+fn log_diff<T, S>(hashset_name: &str, hashset_diff: HDiff<T, S>)
 where
     T: Eq + Hash + Debug,
     S: std::hash::BuildHasher,
 {
+    info!("Diff for {hashset_name}");
     info!("[+] Elements added in the updated configuration:");
     print_rows(hashset_diff.added);
 
@@ -112,8 +113,8 @@ pub async fn async_watch(
                             &new_filter_config.filter_include_pubkeys,
                         );
 
-                    log_diff(include_owners_diff);
-                    log_diff(include_pubkeys_diff);
+                    log_diff("Owners:", include_owners_diff);
+                    log_diff("Pubkeys:", include_pubkeys_diff);
 
                     drop(read_guard);
 
