@@ -52,7 +52,11 @@ fn print_rows<T: Debug>(elements: impl IntoIterator<Item = T>) {
         output.push('\n');
     }
 
-    info!("{}", output);
+    if count > 0 {
+        info!("{}", output);
+    } else {
+        info!("None");
+    }
 }
 
 fn log_diff<T, S>(hashset_diff: HDiff<T, S>)
