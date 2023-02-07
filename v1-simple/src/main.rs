@@ -75,46 +75,51 @@ async fn run(mut config: FilterConfig) {
 
     let config = Arc::new(config);
 
+    let account_capacity = config.update_account_queue_capacity();
+    let slot_capacity = config.update_slot_queue_capacity();
+    let block_capacity = config.notify_block_queue_capacity();
+    let _transaction_capacity = config.notify_transaction_queue_capacity();
+
     let db_account_queue: Arc<SegQueue<DbAccountInfo>> = Arc::new(SegQueue::new());
-    let db_block_queue: Arc<SegQueue<DbBlockInfo>> = Arc::new(SegQueue::new());
     let db_slot_queue: Arc<SegQueue<UpdateSlotStatus>> = Arc::new(SegQueue::new());
+    let db_block_queue: Arc<SegQueue<DbBlockInfo>> = Arc::new(SegQueue::new());
 
     logger.set_level((&config.global_log_level).into());
 
     let client = initialize_db_client(config.clone()).await;
 
-    let (filter_tx_account, filter_rx_account) = flume::unbounded::<UpdateAccount>();
-    let (filter_tx_slots, filter_rx_slots) = flume::unbounded::<UpdateSlotStatus>();
-    let (filter_tx_block, filter_rx_block) = flume::unbounded::<NotifyBlockMetaData>();
+    let (filter_account_tx, filter_account_rx) = flume::bounded::<UpdateAccount>(account_capacity);
+    let (filter_slot_tx, filter_slot_rx) = flume::bounded::<UpdateSlotStatus>(slot_capacity);
+    let (filter_block_tx, filter_block_rx) = flume::bounded::<NotifyBlockMetaData>(block_capacity);
 
     let account_filter = tokio::spawn(account_filter(
         config.clone(),
         db_account_queue.clone(),
-        filter_rx_account,
+        filter_account_rx,
     ));
 
-    let block_filter = tokio::spawn(block_filter(db_block_queue.clone(), filter_rx_block));
+    let block_filter = tokio::spawn(block_filter(db_block_queue.clone(), filter_block_rx));
 
-    let slot_filter = tokio::spawn(slot_filter(db_slot_queue.clone(), filter_rx_slots));
+    let slot_filter = tokio::spawn(slot_filter(db_slot_queue.clone(), filter_slot_rx));
 
     let consumer_update_account = tokio::spawn(consumer(
         config.clone(),
         update_account_topic,
-        filter_tx_account,
+        filter_account_tx,
         ctx_stats.clone(),
     ));
 
     let consumer_update_slot = tokio::spawn(consumer(
         config.clone(),
         update_slot_topic,
-        filter_tx_slots,
+        filter_slot_tx,
         ctx_stats.clone(),
     ));
 
     let consumer_notify_block = tokio::spawn(consumer(
         config.clone(),
         notify_block_topic,
-        filter_tx_block,
+        filter_block_tx,
         ctx_stats,
     ));
 
