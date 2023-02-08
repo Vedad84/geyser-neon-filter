@@ -5,13 +5,14 @@ use core::panic;
 
 use clap::{Arg, Command};
 use clickhouse::{error::Result, Client};
-use db::fetch_update_account;
+
 use inquire::CustomType;
 use inquire::Select;
 use parse::{SlotOrHash, SlotOrSignature, VersionOrPubkey};
 
 use crate::db::fetch_row_count;
 use crate::db::fetch_table_info;
+use crate::db::fetch_update_account;
 use crate::db::fetch_update_slot;
 use crate::db::{fetch_block_info, fetch_transaction_info};
 
