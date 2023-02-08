@@ -18,7 +18,6 @@ CREATE TABLE IF NOT EXISTS events.update_account_local ON CLUSTER '{cluster}' (
 ) PRIMARY KEY (pubkey, slot, write_version)
 PARTITION BY toYYYYMMDD(retrieved_time)
 ORDER BY (pubkey, slot, write_version)
-TTL toDateTime(retrieved_time) + INTERVAL 60 DAY
 SETTINGS index_granularity=8192;
 
 CREATE TABLE IF NOT EXISTS events.update_account_distributed ON CLUSTER '{cluster}' AS events.update_account_local
