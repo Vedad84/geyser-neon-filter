@@ -18,7 +18,7 @@ use tokio_postgres::types::ToSql;
 use tokio_postgres::Client;
 use tokio_postgres::NoTls;
 
-use crate::config::FilterConfig;
+use crate::config::AppConfig;
 use crate::db_inserts::insert_into_account_audit;
 use crate::db_inserts::insert_into_block_metadata;
 use crate::db_inserts::insert_slot_status_internal;
@@ -175,7 +175,7 @@ impl From<KafkaReplicaBlockInfo> for DbBlockInfo {
     }
 }
 
-pub async fn initialize_db_client(config: Arc<FilterConfig>) -> Arc<Client> {
+pub async fn initialize_db_client(config: Arc<AppConfig>) -> Arc<Client> {
     let client;
     let mut interval = tokio::time::interval(Duration::from_secs(2));
     loop {
@@ -194,7 +194,7 @@ pub async fn initialize_db_client(config: Arc<FilterConfig>) -> Arc<Client> {
     client
 }
 
-async fn connect_to_db(config: Arc<FilterConfig>) -> Result<Arc<Client>> {
+async fn connect_to_db(config: Arc<AppConfig>) -> Result<Arc<Client>> {
     let (client, connection) =
         tokio_postgres::connect(&config.postgres_connection_str, NoTls).await?;
 
@@ -279,7 +279,7 @@ async fn slot_stmt_executor(client: Arc<Client>, slot_queue: Arc<SegQueue<Update
 }
 
 pub async fn db_stmt_executor(
-    config: Arc<FilterConfig>,
+    config: Arc<AppConfig>,
     mut client: Arc<Client>,
     account_queue: Arc<SegQueue<DbAccountInfo>>,
     block_queue: Arc<SegQueue<DbBlockInfo>>,

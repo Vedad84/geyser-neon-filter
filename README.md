@@ -5,7 +5,7 @@ This service filters incoming data from Kafka cluster by account owner and puts 
 By default, the service is configured using a configuration file named filter_config.json.
 You can change the path to the config file by command line option **--config** or **-c**
 \
-An example configuration file looks like the following:
+An example of application configuration file looks like the following:
 ```
 {
     "filter_log_path" : "/var/log/neon/filter.log",
@@ -21,17 +21,21 @@ An example configuration file looks like the following:
     "update_slot_topic": "update_slot",
     "session_timeout_ms": "45000",
     "fetch_message_max_bytes": "104857600",
-    "filter_include_owners" : ["base58_string","base58_string"],
-    "filter_include_pubkeys" : ["base58_string","base58_string"],
     "statistics_interval_ms" : "0",
     "prometheus_port": "9090",
     "kafka_log_level": "Info",
-    "global_log_level": "Info"
+    "global_log_level": "Info",
+    "filter_config_path": "/opt/geyser/filter_config.json"
 }
 ```
-
-The filter can also be configured through environment variables:
+Filter config configured like this:
 ```
+{
+    "filter_include_owners" : ["base58_string","base58_string"],
+    "filter_include_pubkeys" : ["base58_string","base58_string"]
+}
+```
+The filter can also be configured through environment variables:
 FILTER_LOG_PATH="/var/log/neon/filter.log"
 BOOTSTRAP_SERVERS="167.235.75.213:9092,159.69.197.26:9092,167.235.151.85:9092"
 KAFKA_CONSUMER_GROUP_ID="filter"
@@ -51,6 +55,7 @@ STATISTICS_INTERVAL_MS="0"
 PROMETHEUS_PORT="9090"
 KAFKA_LOG_LEVEL="Info"
 GLOBAL_LOG_LEVEL="Info"
+FILTER_CONFIG_PATH="/opt/geyser/filter_config.json"
 ```
 
 ## Geyser neon filter V2 (Experimental)
