@@ -193,7 +193,7 @@ pub struct AppConfig {
     pub prometheus_port: String,
     pub kafka_log_level: LogLevel,
     pub global_log_level: GlobalLogLevel,
-    pub filter_config_path: String
+    pub filter_config_path: String,
 }
 
 impl AppConfig {

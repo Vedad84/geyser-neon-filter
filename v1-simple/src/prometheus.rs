@@ -44,7 +44,7 @@ pub async fn start_prometheus(
     );
 
     registry.register(
-        "db_insert_errors",
+        "db_errors",
         "How many database errors occurred",
         stats.db_errors.clone(),
     );

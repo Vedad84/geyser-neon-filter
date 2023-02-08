@@ -18,8 +18,8 @@ use tokio_postgres::types::ToSql;
 use tokio_postgres::Client;
 use tokio_postgres::NoTls;
 
-use crate::consumer_stats::Stats;
 use crate::config::AppConfig;
+use crate::consumer_stats::Stats;
 
 use crate::db_inserts::insert_into_account_audit;
 use crate::db_inserts::insert_into_block_metadata;
