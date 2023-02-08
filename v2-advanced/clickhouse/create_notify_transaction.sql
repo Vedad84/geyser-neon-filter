@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS events.notify_transaction_local ON CLUSTER '{cluster}
 ) PRIMARY KEY (signature, slot)
 PARTITION BY toYYYYMMDD(retrieved_time)
 ORDER BY (signature, slot)
+TTL toDateTime(retrieved_time) + INTERVAL 60 DAY
 SETTINGS index_granularity=8192;
 
 CREATE TABLE IF NOT EXISTS events.notify_transaction_distributed ON CLUSTER '{cluster}' AS events.notify_transaction_local
