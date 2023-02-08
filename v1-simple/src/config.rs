@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 use std::{env, str::FromStr};
 use strum_macros::EnumString;
 
+use crate::filter_config::FilterConfig;
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, EnumString)]
 pub enum LogLevel {
     /// Higher priority then [`Level::Error`](log::Level::Error) from the log
@@ -73,7 +75,7 @@ impl From<&GlobalLogLevel> for LevelFilter {
     }
 }
 
-pub fn env_build_config() -> FilterConfig {
+pub fn env_build_config() -> (AppConfig, FilterConfig) {
     let filter_log_path = env::var("FILTER_LOG_PATH").expect("FILTER_LOG_PATH is not set");
     let bootstrap_servers = env::var("BOOTSTRAP_SERVERS").expect("BOOTSTRAP_SERVERS is not set");
     let kafka_consumer_group_id =
@@ -131,7 +133,9 @@ pub fn env_build_config() -> FilterConfig {
     let notify_block_queue_capacity =
         env::var("NOTIFY_BLOCK_QUEUE_CAPACITY").expect("NOTIFY_BLOCK_QUEUE_CAPACITY is not set");
 
-    FilterConfig {
+    let filter_config_path = env::var("FILTER_CONFIG_PATH").expect("FILTER_CONFIG_PATH is not set");
+
+    let cfg = AppConfig {
         filter_log_path,
         bootstrap_servers,
         kafka_consumer_group_id,
@@ -150,17 +154,23 @@ pub fn env_build_config() -> FilterConfig {
         notify_block_queue_capacity,
         session_timeout_ms,
         fetch_message_max_bytes,
-        filter_include_owners,
-        filter_include_pubkeys,
         statistics_interval_ms,
         prometheus_port,
         kafka_log_level,
         global_log_level,
-    }
+        filter_config_path,
+    };
+
+    let filter_cfg = FilterConfig {
+        filter_include_owners,
+        filter_include_pubkeys,
+    };
+
+    (cfg, filter_cfg)
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct FilterConfig {
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AppConfig {
     pub filter_log_path: String,
     pub bootstrap_servers: String,
     pub kafka_consumer_group_id: String,
@@ -179,17 +189,14 @@ pub struct FilterConfig {
     pub notify_block_queue_capacity: String,
     pub session_timeout_ms: String,
     pub fetch_message_max_bytes: String,
-    // Filter by account owners in base58
-    pub filter_include_owners: AHashSet<String>,
-    // Alway include list for filter ( public keys from 32 to 44 characters in base58 )
-    pub filter_include_pubkeys: AHashSet<String>,
     pub statistics_interval_ms: String,
     pub prometheus_port: String,
     pub kafka_log_level: LogLevel,
     pub global_log_level: GlobalLogLevel,
+    pub filter_config_path: String
 }
 
-impl FilterConfig {
+impl AppConfig {
     pub fn update_account_queue_capacity(&self) -> usize {
         self.update_account_queue_capacity
             .parse()
