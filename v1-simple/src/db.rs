@@ -19,6 +19,7 @@ use tokio_postgres::Client;
 use tokio_postgres::NoTls;
 
 use crate::config::FilterConfig;
+use crate::consumer_stats::Stats;
 use crate::db_inserts::insert_into_account_audit;
 use crate::db_inserts::insert_into_block_metadata;
 use crate::db_inserts::insert_slot_status_internal;
@@ -207,13 +208,18 @@ async fn connect_to_db(config: Arc<FilterConfig>) -> Result<Arc<Client>> {
     Ok(Arc::new(client))
 }
 
-async fn account_stmt_executor(client: Arc<Client>, account_queue: Arc<SegQueue<DbAccountInfo>>) {
+async fn account_stmt_executor(
+    client: Arc<Client>,
+    stats: Arc<Stats>,
+    account_queue: Arc<SegQueue<DbAccountInfo>>,
+) {
     if let Some(db_account_info) = account_queue.pop() {
         tokio::spawn(async move {
             let statement = match create_account_insert_statement(client.clone()).await {
                 Ok(s) => s,
                 Err(e) => {
                     error!("Failed to execute create_account_insert_statement, error {e}");
+                    stats.db_errors.inc();
                     account_queue.push(db_account_info);
                     return;
                 }
@@ -223,6 +229,7 @@ async fn account_stmt_executor(client: Arc<Client>, account_queue: Arc<SegQueue<
                 insert_into_account_audit(&db_account_info, &statement, client).await
             {
                 error!("Failed to insert the data to account_audit, error: {error}");
+                stats.db_errors.inc();
                 // Push account_info back to the database queue
                 account_queue.push(db_account_info);
             }
@@ -230,13 +237,18 @@ async fn account_stmt_executor(client: Arc<Client>, account_queue: Arc<SegQueue<
     }
 }
 
-async fn block_stmt_executor(client: Arc<Client>, block_queue: Arc<SegQueue<DbBlockInfo>>) {
+async fn block_stmt_executor(
+    client: Arc<Client>,
+    stats: Arc<Stats>,
+    block_queue: Arc<SegQueue<DbBlockInfo>>,
+) {
     if let Some(db_block_info) = block_queue.pop() {
         tokio::spawn(async move {
             let statement = match create_block_metadata_insert_statement(client.clone()).await {
                 Ok(s) => s,
                 Err(e) => {
                     error!("Failed to prepare create_block_metadata_insert_statement, error {e}");
+                    stats.db_errors.inc();
                     block_queue.push(db_block_info);
                     return;
                 }
@@ -245,6 +257,7 @@ async fn block_stmt_executor(client: Arc<Client>, block_queue: Arc<SegQueue<DbBl
             if let Err(error) = insert_into_block_metadata(&db_block_info, &statement, client).await
             {
                 error!("Failed to insert the data to block_metadata, error: {error}");
+                stats.db_errors.inc();
                 // Push block_info back to the database queue
                 block_queue.push(db_block_info);
             }
@@ -252,7 +265,11 @@ async fn block_stmt_executor(client: Arc<Client>, block_queue: Arc<SegQueue<DbBl
     }
 }
 
-async fn slot_stmt_executor(client: Arc<Client>, slot_queue: Arc<SegQueue<UpdateSlotStatus>>) {
+async fn slot_stmt_executor(
+    client: Arc<Client>,
+    stats: Arc<Stats>,
+    slot_queue: Arc<SegQueue<UpdateSlotStatus>>,
+) {
     if let Some(db_slot_info) = slot_queue.pop() {
         tokio::spawn(async move {
             let statement = match db_slot_info.parent {
@@ -266,11 +283,13 @@ async fn slot_stmt_executor(client: Arc<Client>, slot_queue: Arc<SegQueue<Update
                         insert_slot_status_internal(&db_slot_info, &statement, client).await
                     {
                         error!("Failed to execute insert_slot_status_internal, error {e}");
+                        stats.db_errors.inc();
                         slot_queue.push(db_slot_info);
                     }
                 }
                 Err(e) => {
                     error!("Failed to prepare create_slot_insert_statement, error {e}");
+                    stats.db_errors.inc();
                     slot_queue.push(db_slot_info);
                 }
             }
@@ -281,6 +300,7 @@ async fn slot_stmt_executor(client: Arc<Client>, slot_queue: Arc<SegQueue<Update
 pub async fn db_stmt_executor(
     config: Arc<FilterConfig>,
     mut client: Arc<Client>,
+    stats: Arc<Stats>,
     account_queue: Arc<SegQueue<DbAccountInfo>>,
     block_queue: Arc<SegQueue<DbBlockInfo>>,
     slot_queue: Arc<SegQueue<UpdateSlotStatus>>,
@@ -297,8 +317,8 @@ pub async fn db_stmt_executor(
             idle_interval.tick().await;
         }
 
-        account_stmt_executor(client.clone(), account_queue.clone()).await;
-        block_stmt_executor(client.clone(), block_queue.clone()).await;
-        slot_stmt_executor(client.clone(), slot_queue.clone()).await;
+        account_stmt_executor(client.clone(), stats.clone(), account_queue.clone()).await;
+        block_stmt_executor(client.clone(), stats.clone(), block_queue.clone()).await;
+        slot_stmt_executor(client.clone(), stats.clone(), slot_queue.clone()).await;
     }
 }

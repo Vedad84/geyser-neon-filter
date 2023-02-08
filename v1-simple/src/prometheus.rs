@@ -43,6 +43,12 @@ pub async fn start_prometheus(
         stats.kafka_errors_deserialize.clone(),
     );
 
+    registry.register(
+        "db_insert_errors",
+        "How many database errors occurred",
+        stats.db_errors.clone(),
+    );
+
     let registry_with_label = registry.sub_registry_with_label((
         Cow::Borrowed("topic"),
         Cow::from(

@@ -13,6 +13,7 @@ pub struct Stats {
     pub kafka_errors_consumer: Counter<u64, AtomicU64>,
     pub kafka_errors_deserialize: Counter<u64, AtomicU64>,
     pub kafka_bytes_rx: Counter<u64, AtomicU64>,
+    pub db_errors: Counter<u64, AtomicU64>,
 }
 
 pub trait GetCounters {

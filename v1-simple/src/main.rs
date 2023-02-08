@@ -120,12 +120,13 @@ async fn run(mut config: FilterConfig) {
         config.clone(),
         notify_block_topic,
         filter_block_tx,
-        ctx_stats,
+        ctx_stats.clone(),
     ));
 
     let db_stmt_executor = tokio::spawn(db_stmt_executor(
         config.clone(),
         client,
+        ctx_stats.stats.clone(),
         db_account_queue,
         db_block_queue,
         db_slot_queue,
