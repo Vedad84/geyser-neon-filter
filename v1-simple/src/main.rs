@@ -6,6 +6,7 @@ mod consumer_stats;
 mod db;
 mod db_inserts;
 mod db_statements;
+mod db_types;
 mod filter;
 mod filter_config;
 mod prometheus;
@@ -17,13 +18,13 @@ use crate::{
     config_hot_reload::async_watch,
     consumer::consumer,
     consumer_stats::ContextWithStats,
-    db::DbBlockInfo,
-    filter::{block_filter, slot_filter},
+    db_types::{DbAccountInfo, DbBlockInfo, DbTransaction},
+    filter::{block_filter, slot_filter, transaction_filter},
 };
 use clap::{Arg, Command};
 use config::{env_build_config, AppConfig};
 use crossbeam_queue::SegQueue;
-use db::{db_stmt_executor, initialize_db_client, DbAccountInfo};
+use db::{db_stmt_executor, initialize_db_client};
 use fast_log::{
     consts::LogSize,
     plugin::{file_split::RollingType, packer::LogPacker},
@@ -31,7 +32,9 @@ use fast_log::{
 };
 use filter::account_filter;
 use filter_config::FilterConfig;
-use kafka_common::kafka_structs::{NotifyBlockMetaData, UpdateAccount, UpdateSlotStatus};
+use kafka_common::kafka_structs::{
+    NotifyBlockMetaData, NotifyTransaction, UpdateAccount, UpdateSlotStatus,
+};
 use log::info;
 use prometheus::start_prometheus;
 use tokio::{fs, sync::RwLock};
@@ -62,20 +65,25 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
         prometheus_port,
     ));
 
+    let update_slot_topic = config
+        .update_slot_topic
+        .take()
+        .expect("notify_slot_topic is not present in config");
+
     let update_account_topic = config
         .update_account_topic
         .take()
         .expect("update_account_topic is not present in config");
 
+    let notify_transaction_topic = config
+        .notify_transaction_topic
+        .take()
+        .expect("notify_transaction_topic is not present in config");
+
     let notify_block_topic = config
         .notify_block_topic
         .take()
         .expect("notify_block_topic is not present in config");
-
-    let update_slot_topic = config
-        .update_slot_topic
-        .take()
-        .expect("notify_slot_topic is not present in config");
 
     let config = Arc::new(config);
     let filter_config = Arc::new(RwLock::new(filter_config));
@@ -83,11 +91,12 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
     let account_capacity = config.update_account_queue_capacity();
     let slot_capacity = config.update_slot_queue_capacity();
     let block_capacity = config.notify_block_queue_capacity();
-    let _transaction_capacity = config.notify_transaction_queue_capacity();
+    let transaction_capacity = config.notify_transaction_queue_capacity();
 
     let db_account_queue: Arc<SegQueue<DbAccountInfo>> = Arc::new(SegQueue::new());
     let db_slot_queue: Arc<SegQueue<UpdateSlotStatus>> = Arc::new(SegQueue::new());
     let db_block_queue: Arc<SegQueue<DbBlockInfo>> = Arc::new(SegQueue::new());
+    let db_transaction_queue: Arc<SegQueue<DbTransaction>> = Arc::new(SegQueue::new());
 
     logger.set_level((&config.global_log_level).into());
 
@@ -95,6 +104,8 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
 
     let (filter_account_tx, filter_account_rx) = flume::bounded::<UpdateAccount>(account_capacity);
     let (filter_slot_tx, filter_slot_rx) = flume::bounded::<UpdateSlotStatus>(slot_capacity);
+    let (filter_transaction_tx, filter_transaction_rx) =
+        flume::bounded::<NotifyTransaction>(transaction_capacity);
     let (filter_block_tx, filter_block_rx) = flume::bounded::<NotifyBlockMetaData>(block_capacity);
 
     let cfg_watcher = tokio::spawn(async_watch(config.clone(), filter_config.clone()));
@@ -103,6 +114,11 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
         filter_config.clone(),
         db_account_queue.clone(),
         filter_account_rx,
+    ));
+
+    let transaction_filter = tokio::spawn(transaction_filter(
+        db_transaction_queue.clone(),
+        filter_transaction_rx,
     ));
 
     let block_filter = tokio::spawn(block_filter(db_block_queue.clone(), filter_block_rx));
@@ -120,6 +136,13 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
         config.clone(),
         update_slot_topic,
         filter_slot_tx,
+        ctx_stats.clone(),
+    ));
+
+    let consumer_transaction = tokio::spawn(consumer(
+        config.clone(),
+        notify_transaction_topic,
+        filter_transaction_tx,
         ctx_stats.clone(),
     ));
 
@@ -142,8 +165,10 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
     let _ = tokio::join!(
         consumer_update_account,
         consumer_update_slot,
+        consumer_transaction,
         consumer_notify_block,
         account_filter,
+        transaction_filter,
         block_filter,
         slot_filter,
         db_stmt_executor,

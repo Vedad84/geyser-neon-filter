@@ -1,20 +1,14 @@
-use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::anyhow;
 use anyhow::Result;
 use crossbeam_queue::SegQueue;
-use kafka_common::kafka_structs::KafkaReplicaBlockInfo;
-use kafka_common::kafka_structs::UpdateAccount;
+
 use kafka_common::kafka_structs::UpdateSlotStatus;
 use log::error;
 use log::info;
 use log::warn;
-use postgres_types::FromSql;
-use solana_runtime::bank::RewardType;
-use solana_transaction_status::Reward;
-use tokio_postgres::types::ToSql;
+
 use tokio_postgres::Client;
 use tokio_postgres::NoTls;
 
@@ -28,154 +22,8 @@ use crate::db_statements::create_account_insert_statement;
 use crate::db_statements::create_block_metadata_insert_statement;
 use crate::db_statements::create_slot_insert_statement_with_parent;
 use crate::db_statements::create_slot_insert_statement_without_parent;
-
-#[derive(Clone, Eq, PartialEq, Debug)]
-pub struct DbAccountInfo {
-    pub pubkey: Vec<u8>,
-    pub lamports: i64,
-    pub owner: Vec<u8>,
-    pub executable: bool,
-    pub rent_epoch: i64,
-    pub data: Vec<u8>,
-    pub slot: i64,
-    pub write_version: i64,
-    pub txn_signature: Option<Vec<u8>>,
-}
-
-#[derive(Clone, Debug)]
-pub struct DbBlockInfo {
-    pub slot: i64,
-    pub blockhash: String,
-    pub rewards: Vec<DbReward>,
-    pub block_time: Option<i64>,
-    pub block_height: Option<i64>,
-}
-
-#[derive(Clone, Debug, FromSql, ToSql, Eq, PartialEq)]
-#[postgres(name = "RewardType")]
-pub enum DbRewardType {
-    Fee,
-    Rent,
-    Staking,
-    Voting,
-}
-
-#[derive(Clone, Debug, FromSql, ToSql)]
-#[postgres(name = "Reward")]
-pub struct DbReward {
-    pub pubkey: String,
-    pub lamports: i64,
-    pub post_balance: i64,
-    pub reward_type: Option<DbRewardType>,
-    pub commission: Option<i16>,
-}
-
-impl fmt::Display for DbAccountInfo {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{self:?}")
-    }
-}
-
-fn range_check(lamports: u64, rent_epoch: u64, write_version: u64) -> Result<()> {
-    if lamports > std::i64::MAX as u64 {
-        return Err(anyhow!("account_info.lamports greater than std::i64::MAX!"));
-    }
-    if rent_epoch > std::i64::MAX as u64 {
-        return Err(anyhow!(
-            "account_info.rent_epoch greater than std::i64::MAX!"
-        ));
-    }
-    if write_version > std::i64::MAX as u64 {
-        return Err(anyhow!(
-            "account_info.write_version greater than std::i64::MAX!"
-        ));
-    }
-    Ok(())
-}
-
-impl TryFrom<&UpdateAccount> for DbAccountInfo {
-    type Error = anyhow::Error;
-
-    fn try_from(update_account: &UpdateAccount) -> Result<Self> {
-        match &update_account.account {
-            kafka_common::kafka_structs::KafkaReplicaAccountInfoVersions::V0_0_1(account_info) => {
-                range_check(
-                    account_info.lamports,
-                    account_info.rent_epoch,
-                    account_info.write_version,
-                )?;
-
-                Ok(DbAccountInfo {
-                    pubkey: account_info.pubkey.clone(),
-                    lamports: account_info.lamports as i64,
-                    owner: account_info.owner.clone(),
-                    executable: account_info.executable,
-                    rent_epoch: account_info.rent_epoch as i64,
-                    data: account_info.data.clone(),
-                    slot: update_account.slot as i64,
-                    write_version: account_info.write_version as i64,
-                    txn_signature: None,
-                })
-            }
-            kafka_common::kafka_structs::KafkaReplicaAccountInfoVersions::V0_0_2(account_info) => {
-                range_check(
-                    account_info.lamports,
-                    account_info.rent_epoch,
-                    account_info.write_version,
-                )?;
-
-                Ok(DbAccountInfo {
-                    pubkey: account_info.pubkey.clone(),
-                    lamports: account_info.lamports as i64,
-                    owner: account_info.owner.clone(),
-                    executable: account_info.executable,
-                    rent_epoch: account_info.rent_epoch as i64,
-                    data: account_info.data.clone(),
-                    slot: update_account.slot as i64,
-                    write_version: account_info.write_version as i64,
-                    txn_signature: account_info.txn_signature.map(|v| v.as_ref().to_vec()),
-                })
-            }
-        }
-    }
-}
-
-impl From<RewardType> for DbRewardType {
-    fn from(reward_type: RewardType) -> Self {
-        match reward_type {
-            RewardType::Fee => Self::Fee,
-            RewardType::Rent => Self::Rent,
-            RewardType::Staking => Self::Staking,
-            RewardType::Voting => Self::Voting,
-        }
-    }
-}
-
-impl From<&Reward> for DbReward {
-    fn from(reward: &Reward) -> Self {
-        DbReward {
-            pubkey: reward.pubkey.clone(),
-            lamports: reward.lamports,
-            post_balance: reward.post_balance as i64,
-            reward_type: reward.reward_type.map(|v| v.into()),
-            commission: reward.commission.map(|v| v as i16),
-        }
-    }
-}
-
-impl From<KafkaReplicaBlockInfo> for DbBlockInfo {
-    fn from(block_info: KafkaReplicaBlockInfo) -> Self {
-        Self {
-            slot: block_info.slot as i64,
-            blockhash: block_info.blockhash.to_string(),
-            rewards: block_info.rewards.iter().map(DbReward::from).collect(),
-            block_time: block_info.block_time,
-            block_height: block_info
-                .block_height
-                .map(|block_height| block_height as i64),
-        }
-    }
-}
+use crate::db_types::DbAccountInfo;
+use crate::db_types::DbBlockInfo;
 
 pub async fn initialize_db_client(config: Arc<AppConfig>) -> Arc<Client> {
     let client;

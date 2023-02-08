@@ -5,8 +5,8 @@ use kafka_common::kafka_structs::UpdateSlotStatus;
 use std::sync::Arc;
 use tokio_postgres::{Client, Statement};
 
-use crate::db::DbAccountInfo;
-use crate::db::DbBlockInfo;
+use crate::db_types::DbAccountInfo;
+use crate::db_types::DbBlockInfo;
 
 pub async fn insert_into_account_audit(
     account: &DbAccountInfo,

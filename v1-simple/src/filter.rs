@@ -1,13 +1,15 @@
 use std::sync::Arc;
 
 use crate::{
-    db::{DbAccountInfo, DbBlockInfo},
+    db_types::{DbAccountInfo, DbBlockInfo, DbTransaction},
     filter_config::FilterConfig,
 };
 use anyhow::Result;
 use crossbeam_queue::SegQueue;
 use flume::Receiver;
-use kafka_common::kafka_structs::{NotifyBlockMetaData, UpdateAccount, UpdateSlotStatus};
+use kafka_common::kafka_structs::{
+    NotifyBlockMetaData, NotifyTransaction, UpdateAccount, UpdateSlotStatus,
+};
 use log::{error, trace};
 use tokio::sync::RwLock;
 
@@ -80,6 +82,17 @@ pub async fn account_filter(
                     error!("Failed to process account info, error: {e}");
                 }
             });
+        }
+    }
+}
+
+pub async fn transaction_filter(
+    transaction_queue: Arc<SegQueue<DbTransaction>>,
+    filter_rx: Receiver<NotifyTransaction>,
+) {
+    loop {
+        if let Ok(transaction) = filter_rx.recv_async().await {
+            transaction_queue.push(transaction.into());
         }
     }
 }
