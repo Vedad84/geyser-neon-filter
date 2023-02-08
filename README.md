@@ -36,6 +36,8 @@ Filter config configured like this:
 }
 ```
 The filter can also be configured through environment variables:
+
+```
 FILTER_LOG_PATH="/var/log/neon/filter.log"
 BOOTSTRAP_SERVERS="167.235.75.213:9092,159.69.197.26:9092,167.235.151.85:9092"
 KAFKA_CONSUMER_GROUP_ID="filter"
