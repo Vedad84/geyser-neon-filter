@@ -66,7 +66,7 @@ async fn exec_account_statement(
     stats: Arc<Stats>,
     account_tx: Sender<DbAccountInfo>,
     account_rx: Receiver<DbAccountInfo>,
-) {
+) -> usize {
     if let Ok(db_account_info) = account_rx.recv_async().await {
         let statement = match create_account_insert_statement(client.clone()).await {
             Ok(s) => s,
@@ -76,7 +76,7 @@ async fn exec_account_statement(
                 if let Err(e) = account_tx.send_async(db_account_info).await {
                     error!("Failed to push account_info back to the database queue, error: {e}");
                 }
-                return;
+                return account_rx.len();
             }
         };
 
@@ -89,6 +89,7 @@ async fn exec_account_statement(
             }
         }
     }
+    account_rx.len()
 }
 
 async fn exec_transaction_statement(
@@ -96,7 +97,7 @@ async fn exec_transaction_statement(
     stats: Arc<Stats>,
     transaction_tx: Sender<DbTransaction>,
     transaction_rx: Receiver<DbTransaction>,
-) {
+) -> usize {
     if let Ok(db_transaction_info) = transaction_rx.recv_async().await {
         let statement = match create_transaction_insert_statement(client.clone()).await {
             Ok(s) => s,
@@ -108,7 +109,7 @@ async fn exec_transaction_statement(
                         "Failed to push transaction_info back to the database queue, error: {e}"
                     );
                 }
-                return;
+                return transaction_rx.len();
             }
         };
 
@@ -122,6 +123,7 @@ async fn exec_transaction_statement(
             }
         }
     }
+    transaction_rx.len()
 }
 
 async fn exec_block_statement(
@@ -129,7 +131,7 @@ async fn exec_block_statement(
     stats: Arc<Stats>,
     block_tx: Sender<DbBlockInfo>,
     block_rx: Receiver<DbBlockInfo>,
-) {
+) -> usize {
     if let Ok(db_block_info) = block_rx.recv_async().await {
         let statement = match create_block_metadata_insert_statement(client.clone()).await {
             Ok(s) => s,
@@ -139,7 +141,7 @@ async fn exec_block_statement(
                 if let Err(e) = block_tx.send_async(db_block_info).await {
                     error!("Failed to push block_info back to the database queue, error: {e}");
                 }
-                return;
+                return block_rx.len();
             }
         };
 
@@ -152,6 +154,7 @@ async fn exec_block_statement(
             }
         }
     }
+    block_rx.len()
 }
 
 async fn exec_slot_statement(
@@ -159,7 +162,7 @@ async fn exec_slot_statement(
     stats: Arc<Stats>,
     slot_tx: Sender<UpdateSlotStatus>,
     slot_rx: Receiver<UpdateSlotStatus>,
-) {
+) -> usize {
     if let Ok(db_slot_info) = slot_rx.recv_async().await {
         let statement = match db_slot_info.parent {
             Some(_) => create_slot_insert_statement_with_parent(client.clone()).await,
@@ -186,6 +189,7 @@ async fn exec_slot_statement(
             }
         }
     }
+    slot_rx.len()
 }
 
 pub async fn db_stmt_executor(
@@ -225,7 +229,9 @@ pub async fn db_stmt_executor(
             let account_rx = account_rx.clone();
 
             tokio::spawn(async move {
-                exec_account_statement(client, stats, account_tx, account_rx).await;
+                let channel_len =
+                    exec_account_statement(client, stats.clone(), account_tx, account_rx).await;
+                stats.queue_len_update_slot.set(channel_len as f64);
             });
         }
 
@@ -236,7 +242,9 @@ pub async fn db_stmt_executor(
             let slot_rx = slot_rx.clone();
 
             tokio::spawn(async move {
-                exec_slot_statement(client, stats, slot_tx, slot_rx).await;
+                let channel_len =
+                    exec_slot_statement(client, stats.clone(), slot_tx, slot_rx).await;
+                stats.queue_len_update_slot.set(channel_len as f64);
             });
         }
 
@@ -247,7 +255,14 @@ pub async fn db_stmt_executor(
             let transaction_rx = transaction_rx.clone();
 
             tokio::spawn(async move {
-                exec_transaction_statement(client, stats, transaction_tx, transaction_rx).await;
+                let channel_len = exec_transaction_statement(
+                    client,
+                    stats.clone(),
+                    transaction_tx,
+                    transaction_rx,
+                )
+                .await;
+                stats.queue_len_notify_transaction.set(channel_len as f64);
             });
         }
 
@@ -258,7 +273,9 @@ pub async fn db_stmt_executor(
             let block_rx = block_rx.clone();
 
             tokio::spawn(async move {
-                exec_block_statement(client, stats, block_tx, block_rx).await;
+                let channel_len =
+                    exec_block_statement(client, stats.clone(), block_tx, block_rx).await;
+                stats.queue_len_notify_block.set(channel_len as f64);
             });
         }
     }
