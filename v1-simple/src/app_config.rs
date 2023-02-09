@@ -88,6 +88,8 @@ pub fn env_build_config() -> (AppConfig, FilterConfig) {
     let security_protocol = env::var("SECURITY_PROTOCOL").expect("SECURITY_PROTOCOL is not set");
     let update_account_topic =
         env::var("UPDATE_ACCOUNT_TOPIC").expect("UPDATE_ACCOUNT_TOPIC is not set");
+    let notify_transaction_topic =
+        env::var("NOTIFY_TRANSACTION_TOPIC").expect("NOTIFY_TRANSACTION_TOPIC is not set");
     let notify_block_topic = env::var("NOTIFY_BLOCK_TOPIC").expect("NOTIFY_BLOCK_TOPIC is not set");
     let update_slot_topic = env::var("UPDATE_SLOT_TOPIC").expect("UPDATE_SLOT_TOPIC is not set");
     let session_timeout_ms = env::var("SESSION_TIMEOUT_MS").expect("SESSION_TIMEOUT_MS is not set");
@@ -119,6 +121,18 @@ pub fn env_build_config() -> (AppConfig, FilterConfig) {
     )
     .unwrap_or(GlobalLogLevel::Info);
 
+    let update_account_queue_capacity = env::var("UPDATE_ACCOUNT_QUEUE_CAPACITY")
+        .expect("UPDATE_ACCOUNT_QUEUE_CAPACITY is not set");
+
+    let update_slot_queue_capacity =
+        env::var("UPDATE_SLOT_QUEUE_CAPACITY").expect("UPDATE_SLOT_QUEUE_CAPACITY is not set");
+
+    let notify_transaction_queue_capacity = env::var("NOTIFY_TRANSACTION_QUEUE_CAPACITY")
+        .expect("NOTIFY_TRANSACTION_QUEUE_CAPACITY is not set");
+
+    let notify_block_queue_capacity =
+        env::var("NOTIFY_BLOCK_QUEUE_CAPACITY").expect("NOTIFY_BLOCK_QUEUE_CAPACITY is not set");
+
     let filter_config_path = env::var("FILTER_CONFIG_PATH").expect("FILTER_CONFIG_PATH is not set");
 
     let cfg = AppConfig {
@@ -132,7 +146,12 @@ pub fn env_build_config() -> (AppConfig, FilterConfig) {
         security_protocol,
         update_account_topic: Some(update_account_topic),
         update_slot_topic: Some(update_slot_topic),
+        notify_transaction_topic: Some(notify_transaction_topic),
         notify_block_topic: Some(notify_block_topic),
+        update_account_queue_capacity,
+        update_slot_queue_capacity,
+        notify_transaction_queue_capacity,
+        notify_block_queue_capacity,
         session_timeout_ms,
         fetch_message_max_bytes,
         statistics_interval_ms,
@@ -162,7 +181,12 @@ pub struct AppConfig {
     pub security_protocol: String,
     pub update_account_topic: Option<String>,
     pub update_slot_topic: Option<String>,
+    pub notify_transaction_topic: Option<String>,
     pub notify_block_topic: Option<String>,
+    pub update_account_queue_capacity: String,
+    pub update_slot_queue_capacity: String,
+    pub notify_transaction_queue_capacity: String,
+    pub notify_block_queue_capacity: String,
     pub session_timeout_ms: String,
     pub fetch_message_max_bytes: String,
     pub statistics_interval_ms: String,
@@ -170,4 +194,30 @@ pub struct AppConfig {
     pub kafka_log_level: LogLevel,
     pub global_log_level: GlobalLogLevel,
     pub filter_config_path: String,
+}
+
+impl AppConfig {
+    pub fn update_account_queue_capacity(&self) -> usize {
+        self.update_account_queue_capacity
+            .parse()
+            .expect("UPDATE_ACCOUNT_QUEUE_CAPACITY is not a number")
+    }
+
+    pub fn update_slot_queue_capacity(&self) -> usize {
+        self.update_slot_queue_capacity
+            .parse()
+            .expect("UPDATE_SLOT_QUEUE_CAPACITY is not a number")
+    }
+
+    pub fn notify_transaction_queue_capacity(&self) -> usize {
+        self.notify_transaction_queue_capacity
+            .parse()
+            .expect("NOTIFY_TRANSACTION_QUEUE_CAPACITY is not a number")
+    }
+
+    pub fn notify_block_queue_capacity(&self) -> usize {
+        self.notify_block_queue_capacity
+            .parse()
+            .expect("NOTIFY_BLOCK_QUEUE_CAPACITY is not a number")
+    }
 }

@@ -5,8 +5,9 @@ use kafka_common::kafka_structs::UpdateSlotStatus;
 use std::sync::Arc;
 use tokio_postgres::{Client, Statement};
 
-use crate::db::DbAccountInfo;
-use crate::db::DbBlockInfo;
+use crate::db_types::DbAccountInfo;
+use crate::db_types::DbBlockInfo;
+use crate::db_types::DbTransaction;
 
 pub async fn insert_into_account_audit(
     account: &DbAccountInfo,
@@ -33,7 +34,41 @@ pub async fn insert_into_account_audit(
         .await
     {
         return Err(anyhow!(
-            "DbAccountInfo statement execution failed, error {error}"
+            "DbAccountInfo statement execution failed, error: {error}"
+        ));
+    }
+
+    Ok(())
+}
+
+pub async fn insert_into_transaction(
+    transaction: &DbTransaction,
+    statement: &Statement,
+    client: Arc<Client>,
+) -> Result<()> {
+    let updated_on = Utc::now().naive_utc();
+
+    if let Err(error) = client
+        .query(
+            statement,
+            &[
+                &transaction.signature,
+                &transaction.is_vote,
+                &transaction.slot,
+                &transaction.message_type,
+                &transaction.legacy_message,
+                &transaction.v0_loaded_message,
+                &transaction.signatures,
+                &transaction.message_hash,
+                &transaction.meta,
+                &transaction.index,
+                &updated_on,
+            ],
+        )
+        .await
+    {
+        return Err(anyhow!(
+            "DbTransaction statement execution failed, error: {error}"
         ));
     }
 
@@ -62,7 +97,7 @@ pub async fn insert_into_block_metadata(
         .await
     {
         return Err(anyhow!(
-            "DbBlockInfo statement execution failed, error {error}"
+            "DbBlockInfo statement execution failed, error: {error}"
         ));
     }
 
@@ -103,7 +138,7 @@ pub async fn insert_slot_status_internal(
 
     if let Err(error) = result {
         return Err(anyhow!(
-            "UpdateSlotStatus statement execution failed, error {error}"
+            "UpdateSlotStatus statement execution failed, error: {error}"
         ));
     }
 

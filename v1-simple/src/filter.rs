@@ -1,111 +1,133 @@
-use std::sync::Arc;
+use std::{slice::Iter, sync::Arc};
 
-use crate::{
-    db::{DbAccountInfo, DbBlockInfo},
-    filter_config::FilterConfig,
+use crate::filter_config::FilterConfig;
+use kafka_common::kafka_structs::{
+    KafkaReplicaAccountInfoVersions, KafkaReplicaTransactionInfoVersions, KafkaSanitizedMessage,
+    UpdateAccount,
 };
-use anyhow::Result;
-use crossbeam_queue::SegQueue;
-use flume::Receiver;
-use kafka_common::kafka_structs::{NotifyBlockMetaData, UpdateAccount, UpdateSlotStatus};
-use log::{error, trace};
+use solana_sdk::{message::v0::LoadedAddresses, pubkey::Pubkey};
 use tokio::sync::RwLock;
 
 #[inline(always)]
-async fn check_account(
+async fn _check_account<'a>(
     config: Arc<RwLock<FilterConfig>>,
-    account_queue: Arc<SegQueue<DbAccountInfo>>,
-    update_account: &UpdateAccount,
-    owner: &Vec<u8>,
-    pubkey: &Vec<u8>,
-) -> Result<()> {
-    let owner = bs58::encode(owner).into_string();
+    owner: Option<&'a [u8]>,
+    pubkey: &'a [u8],
+) -> bool {
+    let read_guard = config.read().await;
+    if read_guard.filter_include_pubkeys.is_empty() && read_guard.filter_include_owners.is_empty() {
+        return true;
+    }
+
+    let owner = bs58::encode(owner.unwrap_or_else(|| [].as_ref())).into_string();
     let pubkey = bs58::encode(pubkey).into_string();
-    if config.read().await.filter_include_pubkeys.contains(&pubkey)
-        || config.read().await.filter_include_owners.contains(&owner)
+    if read_guard.filter_include_pubkeys.contains(&pubkey)
+        || read_guard.filter_include_owners.contains(&owner)
     {
-        account_queue.push(update_account.try_into()?);
-        trace!(
-            "Add update_account entry to db queue for pubkey {}, owner {}",
-            pubkey,
-            owner
-        );
+        return true;
     }
-    Ok(())
+    false
 }
 
-async fn process_account_info(
+fn _account_keys(message: &KafkaSanitizedMessage) -> Iter<'_, Pubkey> {
+    match message {
+        KafkaSanitizedMessage::Legacy(message) => message.message.account_keys.iter(),
+        KafkaSanitizedMessage::V0(message) => message.message.account_keys.iter(),
+    }
+}
+
+fn _loaded_addresses(message: &KafkaSanitizedMessage) -> LoadedAddresses {
+    match message {
+        KafkaSanitizedMessage::Legacy(_) => LoadedAddresses::default(),
+        KafkaSanitizedMessage::V0(message) => LoadedAddresses::clone(&message.loaded_addresses),
+    }
+}
+
+#[inline(always)]
+async fn _check_transaction(
     config: Arc<RwLock<FilterConfig>>,
-    account_queue: Arc<SegQueue<DbAccountInfo>>,
-    update_account: UpdateAccount,
-) -> Result<()> {
-    match &update_account.account {
-        // for 1.13.x or earlier
-        kafka_common::kafka_structs::KafkaReplicaAccountInfoVersions::V0_0_1(account_info) => {
-            check_account(
-                config,
-                account_queue,
-                &update_account,
-                &account_info.owner,
-                &account_info.pubkey,
-            )
-            .await?;
-        }
-        kafka_common::kafka_structs::KafkaReplicaAccountInfoVersions::V0_0_2(account_info) => {
-            check_account(
-                config,
-                account_queue,
-                &update_account,
-                &account_info.owner,
-                &account_info.pubkey,
-            )
-            .await?;
+    transaction_info: &KafkaReplicaTransactionInfoVersions,
+) -> bool {
+    let (keys, loaded_addresses) = match transaction_info {
+        KafkaReplicaTransactionInfoVersions::V0_0_1(replica) => (
+            _account_keys(&replica.transaction.message),
+            _loaded_addresses(&replica.transaction.message),
+        ),
+        KafkaReplicaTransactionInfoVersions::V0_0_2(replica) => (
+            _account_keys(&replica.transaction.message),
+            _loaded_addresses(&replica.transaction.message),
+        ),
+    };
+
+    for i in keys {
+        if _check_account(config.clone(), None, &i.to_bytes()).await {
+            return true;
         }
     }
-    Ok(())
+
+    let pubkey_iter = loaded_addresses
+        .writable
+        .iter()
+        .chain(loaded_addresses.readonly.iter());
+
+    for i in pubkey_iter {
+        if _check_account(config.clone(), None, &i.to_bytes()).await {
+            return true;
+        }
+    }
+
+    false
 }
 
-pub async fn account_filter(
+pub async fn _process_transaction_info(
     config: Arc<RwLock<FilterConfig>>,
-    account_queue: Arc<SegQueue<DbAccountInfo>>,
-    filter_rx: Receiver<UpdateAccount>,
-) {
-    loop {
-        if let Ok(update_account) = filter_rx.recv_async().await {
-            let config = config.clone();
-            let account_queue = account_queue.clone();
-
-            tokio::spawn(async move {
-                if let Err(e) = process_account_info(config, account_queue, update_account).await {
-                    error!("Failed to process account info, error: {e}");
-                }
-            });
+    notify_transaction: &KafkaReplicaTransactionInfoVersions,
+) -> bool {
+    match notify_transaction {
+        KafkaReplicaTransactionInfoVersions::V0_0_1(transaction_replica) => {
+            if !transaction_replica.is_vote && _check_transaction(config, notify_transaction).await
+            {
+                return true;
+            }
         }
-    }
-}
-
-pub async fn block_filter(
-    block_queue: Arc<SegQueue<DbBlockInfo>>,
-    filter_rx: Receiver<NotifyBlockMetaData>,
-) {
-    loop {
-        if let Ok(notify_block_data) = filter_rx.recv_async().await {
-            match notify_block_data.block_info {
-                kafka_common::kafka_structs::KafkaReplicaBlockInfoVersions::V0_0_1(bi) => {
-                    block_queue.push(bi.into());
-                }
+        KafkaReplicaTransactionInfoVersions::V0_0_2(transaction_replica) => {
+            if !transaction_replica.is_vote && _check_transaction(config, notify_transaction).await
+            {
+                return true;
             }
         }
     }
+    false
 }
 
-pub async fn slot_filter(
-    slot_queue: Arc<SegQueue<UpdateSlotStatus>>,
-    filter_rx: Receiver<UpdateSlotStatus>,
-) {
-    loop {
-        if let Ok(update_slot) = filter_rx.recv_async().await {
-            slot_queue.push(update_slot)
+pub async fn _process_account_info(
+    config: Arc<RwLock<FilterConfig>>,
+    update_account: &UpdateAccount,
+) -> bool {
+    match &update_account.account {
+        // for 1.13.x or earlier
+        KafkaReplicaAccountInfoVersions::V0_0_1(account_info) => {
+            if _check_account(
+                config,
+                Some(account_info.owner.as_slice()),
+                account_info.pubkey.as_slice(),
+            )
+            .await
+            {
+                return true;
+            }
+        }
+        KafkaReplicaAccountInfoVersions::V0_0_2(account_info) => {
+            if _check_account(
+                config,
+                Some(account_info.owner.as_slice()),
+                account_info.pubkey.as_slice(),
+            )
+            .await
+            {
+                return true;
+            }
         }
     }
+    false
 }

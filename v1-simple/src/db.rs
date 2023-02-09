@@ -1,179 +1,33 @@
-use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::anyhow;
 use anyhow::Result;
-use crossbeam_queue::SegQueue;
-use kafka_common::kafka_structs::KafkaReplicaBlockInfo;
-use kafka_common::kafka_structs::UpdateAccount;
+
+use flume::Receiver;
+use flume::Sender;
 use kafka_common::kafka_structs::UpdateSlotStatus;
 use log::error;
 use log::info;
 use log::warn;
-use postgres_types::FromSql;
-use solana_runtime::bank::RewardType;
-use solana_transaction_status::Reward;
-use tokio_postgres::types::ToSql;
+
 use tokio_postgres::Client;
 use tokio_postgres::NoTls;
 
-use crate::config::AppConfig;
+use crate::app_config::AppConfig;
+use crate::consumer_stats::Stats;
+
 use crate::db_inserts::insert_into_account_audit;
 use crate::db_inserts::insert_into_block_metadata;
+use crate::db_inserts::insert_into_transaction;
 use crate::db_inserts::insert_slot_status_internal;
 use crate::db_statements::create_account_insert_statement;
 use crate::db_statements::create_block_metadata_insert_statement;
 use crate::db_statements::create_slot_insert_statement_with_parent;
 use crate::db_statements::create_slot_insert_statement_without_parent;
-
-#[derive(Clone, Eq, PartialEq, Debug)]
-pub struct DbAccountInfo {
-    pub pubkey: Vec<u8>,
-    pub lamports: i64,
-    pub owner: Vec<u8>,
-    pub executable: bool,
-    pub rent_epoch: i64,
-    pub data: Vec<u8>,
-    pub slot: i64,
-    pub write_version: i64,
-    pub txn_signature: Option<Vec<u8>>,
-}
-
-#[derive(Clone, Debug)]
-pub struct DbBlockInfo {
-    pub slot: i64,
-    pub blockhash: String,
-    pub rewards: Vec<DbReward>,
-    pub block_time: Option<i64>,
-    pub block_height: Option<i64>,
-}
-
-#[derive(Clone, Debug, FromSql, ToSql, Eq, PartialEq)]
-#[postgres(name = "RewardType")]
-pub enum DbRewardType {
-    Fee,
-    Rent,
-    Staking,
-    Voting,
-}
-
-#[derive(Clone, Debug, FromSql, ToSql)]
-#[postgres(name = "Reward")]
-pub struct DbReward {
-    pub pubkey: String,
-    pub lamports: i64,
-    pub post_balance: i64,
-    pub reward_type: Option<DbRewardType>,
-    pub commission: Option<i16>,
-}
-
-impl fmt::Display for DbAccountInfo {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{self:?}")
-    }
-}
-
-fn range_check(lamports: u64, rent_epoch: u64, write_version: u64) -> Result<()> {
-    if lamports > std::i64::MAX as u64 {
-        return Err(anyhow!("account_info.lamports greater than std::i64::MAX!"));
-    }
-    if rent_epoch > std::i64::MAX as u64 {
-        return Err(anyhow!(
-            "account_info.rent_epoch greater than std::i64::MAX!"
-        ));
-    }
-    if write_version > std::i64::MAX as u64 {
-        return Err(anyhow!(
-            "account_info.write_version greater than std::i64::MAX!"
-        ));
-    }
-    Ok(())
-}
-
-impl TryFrom<&UpdateAccount> for DbAccountInfo {
-    type Error = anyhow::Error;
-
-    fn try_from(update_account: &UpdateAccount) -> Result<Self> {
-        match &update_account.account {
-            kafka_common::kafka_structs::KafkaReplicaAccountInfoVersions::V0_0_1(account_info) => {
-                range_check(
-                    account_info.lamports,
-                    account_info.rent_epoch,
-                    account_info.write_version,
-                )?;
-
-                Ok(DbAccountInfo {
-                    pubkey: account_info.pubkey.clone(),
-                    lamports: account_info.lamports as i64,
-                    owner: account_info.owner.clone(),
-                    executable: account_info.executable,
-                    rent_epoch: account_info.rent_epoch as i64,
-                    data: account_info.data.clone(),
-                    slot: update_account.slot as i64,
-                    write_version: account_info.write_version as i64,
-                    txn_signature: None,
-                })
-            }
-            kafka_common::kafka_structs::KafkaReplicaAccountInfoVersions::V0_0_2(account_info) => {
-                range_check(
-                    account_info.lamports,
-                    account_info.rent_epoch,
-                    account_info.write_version,
-                )?;
-
-                Ok(DbAccountInfo {
-                    pubkey: account_info.pubkey.clone(),
-                    lamports: account_info.lamports as i64,
-                    owner: account_info.owner.clone(),
-                    executable: account_info.executable,
-                    rent_epoch: account_info.rent_epoch as i64,
-                    data: account_info.data.clone(),
-                    slot: update_account.slot as i64,
-                    write_version: account_info.write_version as i64,
-                    txn_signature: account_info.txn_signature.map(|v| v.as_ref().to_vec()),
-                })
-            }
-        }
-    }
-}
-
-impl From<RewardType> for DbRewardType {
-    fn from(reward_type: RewardType) -> Self {
-        match reward_type {
-            RewardType::Fee => Self::Fee,
-            RewardType::Rent => Self::Rent,
-            RewardType::Staking => Self::Staking,
-            RewardType::Voting => Self::Voting,
-        }
-    }
-}
-
-impl From<&Reward> for DbReward {
-    fn from(reward: &Reward) -> Self {
-        DbReward {
-            pubkey: reward.pubkey.clone(),
-            lamports: reward.lamports,
-            post_balance: reward.post_balance as i64,
-            reward_type: reward.reward_type.map(|v| v.into()),
-            commission: reward.commission.map(|v| v as i16),
-        }
-    }
-}
-
-impl From<KafkaReplicaBlockInfo> for DbBlockInfo {
-    fn from(block_info: KafkaReplicaBlockInfo) -> Self {
-        Self {
-            slot: block_info.slot as i64,
-            blockhash: block_info.blockhash.to_string(),
-            rewards: block_info.rewards.iter().map(DbReward::from).collect(),
-            block_time: block_info.block_time,
-            block_height: block_info
-                .block_height
-                .map(|block_height| block_height as i64),
-        }
-    }
-}
+use crate::db_statements::create_transaction_insert_statement;
+use crate::db_types::DbAccountInfo;
+use crate::db_types::DbBlockInfo;
+use crate::db_types::DbTransaction;
 
 pub async fn initialize_db_client(config: Arc<AppConfig>) -> Arc<Client> {
     let client;
@@ -207,85 +61,152 @@ async fn connect_to_db(config: Arc<AppConfig>) -> Result<Arc<Client>> {
     Ok(Arc::new(client))
 }
 
-async fn account_stmt_executor(client: Arc<Client>, account_queue: Arc<SegQueue<DbAccountInfo>>) {
-    if let Some(db_account_info) = account_queue.pop() {
-        tokio::spawn(async move {
-            let statement = match create_account_insert_statement(client.clone()).await {
-                Ok(s) => s,
-                Err(e) => {
-                    error!("Failed to execute create_account_insert_statement, error {e}");
-                    account_queue.push(db_account_info);
-                    return;
+async fn exec_account_statement(
+    client: Arc<Client>,
+    stats: Arc<Stats>,
+    account_tx: Sender<DbAccountInfo>,
+    account_rx: Receiver<DbAccountInfo>,
+) -> usize {
+    if let Ok(db_account_info) = account_rx.recv_async().await {
+        let statement = match create_account_insert_statement(client.clone()).await {
+            Ok(s) => s,
+            Err(e) => {
+                error!("Failed to execute create_account_insert_statement, error {e}");
+                stats.db_errors.inc();
+                if let Err(e) = account_tx.send_async(db_account_info).await {
+                    error!("Failed to push account_info back to the database queue, error: {e}");
                 }
-            };
-
-            if let Err(error) =
-                insert_into_account_audit(&db_account_info, &statement, client).await
-            {
-                error!("Failed to insert the data to account_audit, error: {error}");
-                // Push account_info back to the database queue
-                account_queue.push(db_account_info);
+                return account_rx.len();
             }
-        });
+        };
+
+        if let Err(error) = insert_into_account_audit(&db_account_info, &statement, client).await {
+            error!("Failed to insert the data to account_audit, error: {error}");
+            stats.db_errors.inc();
+            // Push account_info back to the database queue
+            if let Err(e) = account_tx.send_async(db_account_info).await {
+                error!("Failed to push account_info back to the database queue, error: {e}");
+            }
+        }
     }
+    account_rx.len()
 }
 
-async fn block_stmt_executor(client: Arc<Client>, block_queue: Arc<SegQueue<DbBlockInfo>>) {
-    if let Some(db_block_info) = block_queue.pop() {
-        tokio::spawn(async move {
-            let statement = match create_block_metadata_insert_statement(client.clone()).await {
-                Ok(s) => s,
-                Err(e) => {
-                    error!("Failed to prepare create_block_metadata_insert_statement, error {e}");
-                    block_queue.push(db_block_info);
-                    return;
+async fn exec_transaction_statement(
+    client: Arc<Client>,
+    stats: Arc<Stats>,
+    transaction_tx: Sender<DbTransaction>,
+    transaction_rx: Receiver<DbTransaction>,
+) -> usize {
+    if let Ok(db_transaction_info) = transaction_rx.recv_async().await {
+        let statement = match create_transaction_insert_statement(client.clone()).await {
+            Ok(s) => s,
+            Err(e) => {
+                error!("Failed to execute create_transaction_insert_statement, error {e}");
+                stats.db_errors.inc();
+                if let Err(e) = transaction_tx.send_async(db_transaction_info).await {
+                    error!(
+                        "Failed to push transaction_info back to the database queue, error: {e}"
+                    );
                 }
-            };
-
-            if let Err(error) = insert_into_block_metadata(&db_block_info, &statement, client).await
-            {
-                error!("Failed to insert the data to block_metadata, error: {error}");
-                // Push block_info back to the database queue
-                block_queue.push(db_block_info);
+                return transaction_rx.len();
             }
-        });
+        };
+
+        if let Err(error) = insert_into_transaction(&db_transaction_info, &statement, client).await
+        {
+            error!("Failed to insert the data to transaction_audit, error: {error}");
+            stats.db_errors.inc();
+            // Push transaction_info back to the database queue
+            if let Err(e) = transaction_tx.send_async(db_transaction_info).await {
+                error!("Failed to push transaction_info back to the database queue, error: {e}");
+            }
+        }
     }
+    transaction_rx.len()
 }
 
-async fn slot_stmt_executor(client: Arc<Client>, slot_queue: Arc<SegQueue<UpdateSlotStatus>>) {
-    if let Some(db_slot_info) = slot_queue.pop() {
-        tokio::spawn(async move {
-            let statement = match db_slot_info.parent {
-                Some(_) => create_slot_insert_statement_with_parent(client.clone()).await,
-                None => create_slot_insert_statement_without_parent(client.clone()).await,
-            };
+async fn exec_block_statement(
+    client: Arc<Client>,
+    stats: Arc<Stats>,
+    block_tx: Sender<DbBlockInfo>,
+    block_rx: Receiver<DbBlockInfo>,
+) -> usize {
+    if let Ok(db_block_info) = block_rx.recv_async().await {
+        let statement = match create_block_metadata_insert_statement(client.clone()).await {
+            Ok(s) => s,
+            Err(e) => {
+                error!("Failed to prepare create_block_metadata_insert_statement, error {e}");
+                stats.db_errors.inc();
+                if let Err(e) = block_tx.send_async(db_block_info).await {
+                    error!("Failed to push block_info back to the database queue, error: {e}");
+                }
+                return block_rx.len();
+            }
+        };
 
-            match statement {
-                Ok(statement) => {
-                    if let Err(e) =
-                        insert_slot_status_internal(&db_slot_info, &statement, client).await
-                    {
-                        error!("Failed to execute insert_slot_status_internal, error {e}");
-                        slot_queue.push(db_slot_info);
+        if let Err(error) = insert_into_block_metadata(&db_block_info, &statement, client).await {
+            error!("Failed to insert the data to block_metadata, error: {error}");
+            stats.db_errors.inc();
+            // Push block_info back to the database queue
+            if let Err(e) = block_tx.send_async(db_block_info).await {
+                error!("Failed to push block_info back to the database queue, error: {e}");
+            }
+        }
+    }
+    block_rx.len()
+}
+
+async fn exec_slot_statement(
+    client: Arc<Client>,
+    stats: Arc<Stats>,
+    slot_tx: Sender<UpdateSlotStatus>,
+    slot_rx: Receiver<UpdateSlotStatus>,
+) -> usize {
+    if let Ok(db_slot_info) = slot_rx.recv_async().await {
+        let statement = match db_slot_info.parent {
+            Some(_) => create_slot_insert_statement_with_parent(client.clone()).await,
+            None => create_slot_insert_statement_without_parent(client.clone()).await,
+        };
+
+        match statement {
+            Ok(statement) => {
+                if let Err(e) = insert_slot_status_internal(&db_slot_info, &statement, client).await
+                {
+                    error!("Failed to execute insert_slot_status_internal, error {e}");
+                    stats.db_errors.inc();
+                    if let Err(e) = slot_tx.send_async(db_slot_info).await {
+                        error!("Failed to send slot info back to the queue, error {e}");
                     }
                 }
-                Err(e) => {
-                    error!("Failed to prepare create_slot_insert_statement, error {e}");
-                    slot_queue.push(db_slot_info);
+            }
+            Err(e) => {
+                error!("Failed to prepare create_slot_insert_statement, error {e}");
+                stats.db_errors.inc();
+                if let Err(e) = slot_tx.send_async(db_slot_info).await {
+                    error!("Failed to send slot info back to the queue, error {e}");
                 }
             }
-        });
+        }
     }
+    slot_rx.len()
 }
 
 pub async fn db_stmt_executor(
     config: Arc<AppConfig>,
     mut client: Arc<Client>,
-    account_queue: Arc<SegQueue<DbAccountInfo>>,
-    block_queue: Arc<SegQueue<DbBlockInfo>>,
-    slot_queue: Arc<SegQueue<UpdateSlotStatus>>,
+    stats: Arc<Stats>,
+    account_queue: (Sender<DbAccountInfo>, Receiver<DbAccountInfo>),
+    slot_queue: (Sender<UpdateSlotStatus>, Receiver<UpdateSlotStatus>),
+    transaction_queue: (Sender<DbTransaction>, Receiver<DbTransaction>),
+    block_queue: (Sender<DbBlockInfo>, Receiver<DbBlockInfo>),
 ) {
     let mut idle_interval = tokio::time::interval(Duration::from_millis(500));
+
+    let (account_tx, account_rx) = account_queue;
+    let (slot_tx, slot_rx) = slot_queue;
+    let (transaction_tx, transaction_rx) = transaction_queue;
+    let (block_tx, block_rx) = block_queue;
 
     loop {
         if client.is_closed() {
@@ -293,12 +214,69 @@ pub async fn db_stmt_executor(
             client = initialize_db_client(config.clone()).await;
         }
 
-        if account_queue.is_empty() && block_queue.is_empty() && slot_queue.is_empty() {
+        if account_tx.is_empty()
+            && slot_tx.is_empty()
+            && transaction_tx.is_empty()
+            && block_tx.is_empty()
+        {
             idle_interval.tick().await;
         }
 
-        account_stmt_executor(client.clone(), account_queue.clone()).await;
-        block_stmt_executor(client.clone(), block_queue.clone()).await;
-        slot_stmt_executor(client.clone(), slot_queue.clone()).await;
+        if !account_rx.is_empty() {
+            let client = client.clone();
+            let stats = stats.clone();
+            let account_tx = account_tx.clone();
+            let account_rx = account_rx.clone();
+
+            tokio::spawn(async move {
+                let channel_len =
+                    exec_account_statement(client, stats.clone(), account_tx, account_rx).await;
+                stats.queue_len_update_slot.set(channel_len as f64);
+            });
+        }
+
+        if !slot_rx.is_empty() {
+            let client = client.clone();
+            let stats = stats.clone();
+            let slot_tx = slot_tx.clone();
+            let slot_rx = slot_rx.clone();
+
+            tokio::spawn(async move {
+                let channel_len =
+                    exec_slot_statement(client, stats.clone(), slot_tx, slot_rx).await;
+                stats.queue_len_update_slot.set(channel_len as f64);
+            });
+        }
+
+        if !transaction_rx.is_empty() {
+            let client = client.clone();
+            let stats = stats.clone();
+            let transaction_tx = transaction_tx.clone();
+            let transaction_rx = transaction_rx.clone();
+
+            tokio::spawn(async move {
+                let channel_len = exec_transaction_statement(
+                    client,
+                    stats.clone(),
+                    transaction_tx,
+                    transaction_rx,
+                )
+                .await;
+                stats.queue_len_notify_transaction.set(channel_len as f64);
+            });
+        }
+
+        if !block_rx.is_empty() {
+            let client = client.clone();
+            let stats = stats.clone();
+            let block_tx = block_tx.clone();
+            let block_rx = block_rx.clone();
+
+            tokio::spawn(async move {
+                let channel_len =
+                    exec_block_statement(client, stats.clone(), block_tx, block_rx).await;
+                stats.queue_len_notify_block.set(channel_len as f64);
+            });
+        }
     }
 }

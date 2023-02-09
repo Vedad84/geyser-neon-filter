@@ -18,9 +18,10 @@ use crate::consumer_stats::Stats;
 
 pub async fn start_prometheus(
     stats: Arc<Stats>,
-    update_account_topic: Option<String>,
-    update_slot_topic: Option<String>,
-    notify_block_topic: Option<String>,
+    update_account_topic: String,
+    update_slot_topic: String,
+    notify_transaction_topic: String,
+    notify_block_topic: String,
     port: u16,
 ) {
     let mut registry = <Registry>::default();
@@ -43,15 +44,56 @@ pub async fn start_prometheus(
         stats.kafka_errors_deserialize.clone(),
     );
 
+    registry.register(
+        "db_errors",
+        "How many database errors occurred",
+        stats.db_errors.clone(),
+    );
+
     let registry_with_label = registry.sub_registry_with_label((
         Cow::Borrowed("topic"),
-        Cow::from(
-            update_account_topic
-                .as_ref()
-                .unwrap_or(&String::new())
-                .clone(),
-        ),
+        Cow::from(update_account_topic.clone()),
     ));
+
+    registry_with_label.register(
+        "queue_len",
+        "How many UpdateAccount messages queued up for processing",
+        stats.queue_len_update_account.clone(),
+    );
+
+    let registry_with_label = registry
+        .sub_registry_with_label((Cow::Borrowed("topic"), Cow::from(update_slot_topic.clone())));
+
+    registry_with_label.register(
+        "queue_len",
+        "How many UpdateSlot messages queued up for processing",
+        stats.queue_len_update_slot.clone(),
+    );
+
+    let registry_with_label = registry.sub_registry_with_label((
+        Cow::Borrowed("topic"),
+        Cow::from(notify_transaction_topic.clone()),
+    ));
+
+    registry_with_label.register(
+        "queue_len",
+        "How many NotifyTransaction messages queued up for processing",
+        stats.queue_len_notify_transaction.clone(),
+    );
+
+    let registry_with_label = registry.sub_registry_with_label((
+        Cow::Borrowed("topic"),
+        Cow::from(notify_block_topic.clone()),
+    ));
+
+    registry_with_label.register(
+        "queue_len",
+        "How many NotifyBlock messages queued up for processing",
+        stats.queue_len_notify_block.clone(),
+    );
+
+    let registry_with_label =
+        registry.sub_registry_with_label((Cow::Borrowed("topic"), Cow::from(update_account_topic)));
 
     registry_with_label.register(
         "kafka_messages_received",
@@ -59,10 +101,8 @@ pub async fn start_prometheus(
         stats.kafka_update_account.clone(),
     );
 
-    let registry_with_label = registry.sub_registry_with_label((
-        Cow::Borrowed("topic"),
-        Cow::from(update_slot_topic.as_ref().unwrap_or(&String::new()).clone()),
-    ));
+    let registry_with_label =
+        registry.sub_registry_with_label((Cow::Borrowed("topic"), Cow::from(update_slot_topic)));
 
     registry_with_label.register(
         "kafka_messages_received",
@@ -70,11 +110,8 @@ pub async fn start_prometheus(
         stats.kafka_update_slot.clone(),
     );
 
-    // Not used for now
-    let registry_with_label = registry.sub_registry_with_label((
-        Cow::Borrowed("topic"),
-        Cow::from(String::from("notify_transaction")),
-    ));
+    let registry_with_label = registry
+        .sub_registry_with_label((Cow::Borrowed("topic"), Cow::from(notify_transaction_topic)));
 
     registry_with_label.register(
         "kafka_messages_received",
@@ -82,15 +119,8 @@ pub async fn start_prometheus(
         stats.kafka_notify_transaction.clone(),
     );
 
-    let registry_with_label = registry.sub_registry_with_label((
-        Cow::Borrowed("topic"),
-        Cow::from(
-            notify_block_topic
-                .as_ref()
-                .unwrap_or(&String::new())
-                .clone(),
-        ),
-    ));
+    let registry_with_label =
+        registry.sub_registry_with_label((Cow::Borrowed("topic"), Cow::from(notify_block_topic)));
 
     registry_with_label.register(
         "kafka_messages_received",

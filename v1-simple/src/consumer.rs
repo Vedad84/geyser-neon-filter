@@ -6,7 +6,7 @@ use std::sync::{
 use flume::Sender;
 use kafka_common::message_type::{GetMessageType, MessageType};
 use log::{error, info};
-use prometheus_client::metrics::counter::Counter;
+use prometheus_client::metrics::{counter::Counter, gauge::Gauge};
 use rdkafka::{
     consumer::{Consumer, StreamConsumer},
     message::BorrowedMessage,
@@ -15,7 +15,7 @@ use rdkafka::{
 use serde::Deserialize;
 
 use crate::{
-    config::AppConfig,
+    app_config::AppConfig,
     consumer_stats::{ContextWithStats, Stats},
 };
 
@@ -31,21 +31,30 @@ pub fn extract_from_message<'a>(message: &'a BorrowedMessage<'a>) -> Option<&'a 
     payload
 }
 
-pub fn get_counter(stats: &Arc<Stats>, message_type: MessageType) -> &Counter<u64, AtomicU64> {
+pub fn get_counters(
+    stats: &Arc<Stats>,
+    message_type: MessageType,
+) -> (&Counter<u64, AtomicU64>, &Gauge<f64, AtomicU64>) {
     match message_type {
-        MessageType::UpdateAccount => &stats.kafka_update_account,
-        MessageType::UpdateSlot => &stats.kafka_update_slot,
-        MessageType::NotifyTransaction => &stats.kafka_notify_transaction,
-        MessageType::NotifyBlock => &stats.kafka_notify_block,
+        MessageType::UpdateAccount => {
+            (&stats.kafka_update_account, &stats.queue_len_update_account)
+        }
+        MessageType::UpdateSlot => (&stats.kafka_update_slot, &stats.queue_len_update_slot),
+        MessageType::NotifyTransaction => (
+            &stats.kafka_notify_transaction,
+            &stats.queue_len_notify_transaction,
+        ),
+        MessageType::NotifyBlock => (&stats.kafka_notify_block, &stats.queue_len_notify_block),
     }
 }
 
-pub async fn process_message<T>(
+pub async fn process_message<T, S>(
     message: BorrowedMessage<'_>,
-    filter_tx: Sender<T>,
+    filter_tx: Sender<S>,
     stats: Arc<Stats>,
 ) where
-    T: for<'a> Deserialize<'a> + std::marker::Send + 'static + GetMessageType,
+    T: for<'a> Deserialize<'a> + Send + 'static + GetMessageType,
+    S: From<T> + Send + 'static,
 {
     if let Some(payload) = extract_from_message(&message) {
         let type_name = std::any::type_name::<T>();
@@ -59,11 +68,12 @@ pub async fn process_message<T>(
         tokio::spawn(async move {
             match result {
                 Ok(event) => {
-                    let received = get_counter(&stats, event.get_type());
-                    if let Err(e) = filter_tx.send_async(event).await {
+                    let (received, queue_len) = get_counters(&stats, event.get_type());
+                    queue_len.set(filter_tx.len() as f64);
+                    received.inc();
+                    if let Err(e) = filter_tx.send_async(Into::<S>::into(event)).await {
                         error!("Failed to send the data {type_name}, error {e}");
                     }
-                    received.inc();
                 }
                 Err(e) => {
                     error!("Failed to deserialize {type_name} {e}");
@@ -76,13 +86,14 @@ pub async fn process_message<T>(
     }
 }
 
-pub async fn consumer<T>(
+pub async fn consumer<T, S>(
     config: Arc<AppConfig>,
     topic: String,
-    filter_tx: Sender<T>,
+    filter_tx: Sender<S>,
     ctx_stats: ContextWithStats,
 ) where
-    T: for<'a> Deserialize<'a> + std::marker::Send + 'static + GetMessageType,
+    T: for<'a> Deserialize<'a> + Send + 'static + GetMessageType,
+    S: From<T> + Send + 'static,
 {
     let type_name = std::any::type_name::<T>();
     let stats = ctx_stats.stats.clone();

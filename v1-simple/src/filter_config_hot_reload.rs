@@ -1,5 +1,5 @@
 use crate::filter_config::read_filter_config;
-use crate::{config::AppConfig, filter_config::FilterConfig};
+use crate::{app_config::AppConfig, filter_config::FilterConfig};
 use ahash::AHashSet;
 use log::{error, info};
 use notify::{
