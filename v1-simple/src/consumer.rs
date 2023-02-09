@@ -6,7 +6,7 @@ use std::sync::{
 use flume::Sender;
 use kafka_common::message_type::{GetMessageType, MessageType};
 use log::{error, info};
-use prometheus_client::metrics::counter::Counter;
+use prometheus_client::metrics::{counter::Counter, gauge::Gauge};
 use rdkafka::{
     consumer::{Consumer, StreamConsumer},
     message::BorrowedMessage,
@@ -31,12 +31,20 @@ pub fn extract_from_message<'a>(message: &'a BorrowedMessage<'a>) -> Option<&'a 
     payload
 }
 
-pub fn get_counter(stats: &Arc<Stats>, message_type: MessageType) -> &Counter<u64, AtomicU64> {
+pub fn get_counter(
+    stats: &Arc<Stats>,
+    message_type: MessageType,
+) -> (&Counter<u64, AtomicU64>, &Gauge<f64, AtomicU64>) {
     match message_type {
-        MessageType::UpdateAccount => &stats.kafka_update_account,
-        MessageType::UpdateSlot => &stats.kafka_update_slot,
-        MessageType::NotifyTransaction => &stats.kafka_notify_transaction,
-        MessageType::NotifyBlock => &stats.kafka_notify_block,
+        MessageType::UpdateAccount => {
+            (&stats.kafka_update_account, &stats.queue_len_update_account)
+        }
+        MessageType::UpdateSlot => (&stats.kafka_update_slot, &stats.queue_len_update_slot),
+        MessageType::NotifyTransaction => (
+            &stats.kafka_notify_transaction,
+            &stats.queue_len_notify_transaction,
+        ),
+        MessageType::NotifyBlock => (&stats.kafka_notify_block, &stats.queue_len_notify_block),
     }
 }
 
@@ -59,7 +67,8 @@ pub async fn process_message<T>(
         tokio::spawn(async move {
             match result {
                 Ok(event) => {
-                    let received = get_counter(&stats, event.get_type());
+                    let (received, queue_len) = get_counter(&stats, event.get_type());
+                    queue_len.set(filter_tx.len() as f64);
                     if let Err(e) = filter_tx.send_async(event).await {
                         error!("Failed to send the data {type_name}, error {e}");
                     }

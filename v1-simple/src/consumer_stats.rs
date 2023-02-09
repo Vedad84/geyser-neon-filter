@@ -1,7 +1,7 @@
 use std::sync::{atomic::AtomicU64, Arc};
 
 use log::info;
-use prometheus_client::metrics::counter::Counter;
+use prometheus_client::metrics::{counter::Counter, gauge::Gauge};
 use rdkafka::{consumer::ConsumerContext, ClientContext, Statistics};
 
 #[derive(Default)]
@@ -13,6 +13,10 @@ pub struct Stats {
     pub kafka_errors_consumer: Counter<u64, AtomicU64>,
     pub kafka_errors_deserialize: Counter<u64, AtomicU64>,
     pub kafka_bytes_rx: Counter<u64, AtomicU64>,
+    pub queue_len_update_account: Gauge<f64, AtomicU64>,
+    pub queue_len_update_slot: Gauge<f64, AtomicU64>,
+    pub queue_len_notify_transaction: Gauge<f64, AtomicU64>,
+    pub queue_len_notify_block: Gauge<f64, AtomicU64>,
     pub db_errors: Counter<u64, AtomicU64>,
 }
 

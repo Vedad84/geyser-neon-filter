@@ -50,6 +50,50 @@ pub async fn start_prometheus(
         stats.db_errors.clone(),
     );
 
+    let registry_with_label = registry.sub_registry_with_label((
+        Cow::Borrowed("queue_len"),
+        Cow::from(update_account_topic.clone()),
+    ));
+
+    registry_with_label.register(
+        "queue_len_update_account",
+        "How many UpdateAccount messages queued up for processing",
+        stats.queue_len_update_account.clone(),
+    );
+
+    let registry_with_label = registry.sub_registry_with_label((
+        Cow::Borrowed("queue_len"),
+        Cow::from(update_slot_topic.clone()),
+    ));
+
+    registry_with_label.register(
+        "queue_len_update_slot",
+        "How many UpdateAccount messages queued up for processing",
+        stats.queue_len_update_slot.clone(),
+    );
+
+    let registry_with_label = registry.sub_registry_with_label((
+        Cow::Borrowed("queue_len"),
+        Cow::from(notify_transaction_topic.clone()),
+    ));
+
+    registry_with_label.register(
+        "queue_len_notify_transaction",
+        "How many UpdateAccount messages queued up for processing",
+        stats.queue_len_notify_transaction.clone(),
+    );
+
+    let registry_with_label = registry.sub_registry_with_label((
+        Cow::Borrowed("queue_len"),
+        Cow::from(notify_block_topic.clone()),
+    ));
+
+    registry_with_label.register(
+        "queue_len_notify_block",
+        "How many UpdateAccount messages queued up for processing",
+        stats.queue_len_notify_block.clone(),
+    );
+
     let registry_with_label =
         registry.sub_registry_with_label((Cow::Borrowed("topic"), Cow::from(update_account_topic)));
 

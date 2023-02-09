@@ -97,8 +97,8 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
 
     let db_account_queue: Arc<SegQueue<DbAccountInfo>> = Arc::new(SegQueue::new());
     let db_slot_queue: Arc<SegQueue<UpdateSlotStatus>> = Arc::new(SegQueue::new());
-    let db_block_queue: Arc<SegQueue<DbBlockInfo>> = Arc::new(SegQueue::new());
     let db_transaction_queue: Arc<SegQueue<DbTransaction>> = Arc::new(SegQueue::new());
+    let db_block_queue: Arc<SegQueue<DbBlockInfo>> = Arc::new(SegQueue::new());
 
     logger.set_level((&config.global_log_level).into());
 
