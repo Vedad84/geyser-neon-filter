@@ -586,21 +586,27 @@ fn get_db_legacy_message(
     }
 }
 
+fn get_db_message_type(message: &KafkaSanitizedMessage) -> i16 {
+    match message {
+        KafkaSanitizedMessage::Legacy(_) => 0,
+        KafkaSanitizedMessage::V0(_) => 1,
+    }
+}
+
+fn get_v0_loaded_message(sanitized_message: &KafkaSanitizedMessage) -> Option<DbLoadedMessageV0> {
+    match sanitized_message {
+        KafkaSanitizedMessage::Legacy(_) => None,
+        KafkaSanitizedMessage::V0(loaded_message) => Some(loaded_message.into()),
+    }
+}
+
 impl From<NotifyTransaction> for DbTransaction {
     fn from(transaction: NotifyTransaction) -> Self {
         match transaction.transaction_info {
             kafka_common::kafka_structs::KafkaReplicaTransactionInfoVersions::V0_0_1(t) => {
                 let message = &t.transaction.message;
-                let message_type = match t.transaction.message {
-                    KafkaSanitizedMessage::Legacy(_) => 0,
-                    KafkaSanitizedMessage::V0(_) => 1,
-                };
-                let v0_loaded_message = match &message {
-                    KafkaSanitizedMessage::V0(loaded_message) => {
-                        Some(DbLoadedMessageV0::from(loaded_message))
-                    }
-                    _ => None,
-                };
+                let message_type = get_db_message_type(message);
+                let v0_loaded_message = get_v0_loaded_message(message);
                 let message_hash = get_message_hash(message);
                 let meta = DbTransactionStatusMeta::from(&t.transaction_status_meta);
                 let signature = t.signature.as_ref().to_vec();
@@ -618,7 +624,7 @@ impl From<NotifyTransaction> for DbTransaction {
                     signature,
                     is_vote,
                     slot: slot as i64,
-                    message_type: message_type as i16,
+                    message_type,
                     legacy_message: get_db_legacy_message(message),
                     v0_loaded_message,
                     message_hash,
@@ -629,16 +635,8 @@ impl From<NotifyTransaction> for DbTransaction {
             }
             kafka_common::kafka_structs::KafkaReplicaTransactionInfoVersions::V0_0_2(t) => {
                 let message = &t.transaction.message;
-                let message_type = match t.transaction.message {
-                    KafkaSanitizedMessage::Legacy(_) => 0,
-                    KafkaSanitizedMessage::V0(_) => 1,
-                };
-                let v0_loaded_message = match &message {
-                    KafkaSanitizedMessage::V0(loaded_message) => {
-                        Some(DbLoadedMessageV0::from(loaded_message))
-                    }
-                    _ => None,
-                };
+                let message_type = get_db_message_type(message);
+                let v0_loaded_message = get_v0_loaded_message(message);
                 let message_hash = get_message_hash(message);
                 let meta = DbTransactionStatusMeta::from(&t.transaction_status_meta);
                 let signature = t.signature.as_ref().to_vec();
@@ -656,7 +654,7 @@ impl From<NotifyTransaction> for DbTransaction {
                     signature,
                     is_vote,
                     slot: slot as i64,
-                    message_type: message_type as i16,
+                    message_type,
                     legacy_message: get_db_legacy_message(message),
                     v0_loaded_message,
                     message_hash,

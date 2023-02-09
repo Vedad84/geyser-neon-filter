@@ -14,9 +14,13 @@ async fn _check_account<'a>(
     owner: Option<&'a [u8]>,
     pubkey: &'a [u8],
 ) -> bool {
+    let read_guard = config.read().await;
+    if read_guard.filter_include_pubkeys.is_empty() && read_guard.filter_include_owners.is_empty() {
+        return true;
+    }
+
     let owner = bs58::encode(owner.unwrap_or_else(|| [].as_ref())).into_string();
     let pubkey = bs58::encode(pubkey).into_string();
-    let read_guard = config.read().await;
     if read_guard.filter_include_pubkeys.contains(&pubkey)
         || read_guard.filter_include_owners.contains(&owner)
     {

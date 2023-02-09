@@ -66,7 +66,7 @@ pub async fn start_prometheus(
 
     registry_with_label.register(
         "queue_len",
-        "How many UpdateAccount messages queued up for processing",
+        "How many UpdateSlot messages queued up for processing",
         stats.queue_len_update_slot.clone(),
     );
 
@@ -77,7 +77,7 @@ pub async fn start_prometheus(
 
     registry_with_label.register(
         "queue_len",
-        "How many UpdateAccount messages queued up for processing",
+        "How many NotifyTransaction messages queued up for processing",
         stats.queue_len_notify_transaction.clone(),
     );
 
@@ -88,7 +88,7 @@ pub async fn start_prometheus(
 
     registry_with_label.register(
         "queue_len",
-        "How many UpdateAccount messages queued up for processing",
+        "How many NotifyBlock messages queued up for processing",
         stats.queue_len_notify_block.clone(),
     );
 
