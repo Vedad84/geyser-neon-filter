@@ -6,6 +6,7 @@ use kafka_common::kafka_structs::KafkaReplicaBlockInfo;
 use kafka_common::kafka_structs::KafkaSanitizedMessage;
 use kafka_common::kafka_structs::KafkaTransactionStatusMeta;
 use kafka_common::kafka_structs::KafkaTransactionTokenBalance;
+use kafka_common::kafka_structs::NotifyBlockMetaData;
 use kafka_common::kafka_structs::NotifyTransaction;
 use kafka_common::kafka_structs::UpdateAccount;
 use postgres_types::FromSql;
@@ -276,6 +277,39 @@ impl TryFrom<&UpdateAccount> for DbAccountInfo {
                     write_version: account_info.write_version as i64,
                     txn_signature: account_info.txn_signature.map(|v| v.as_ref().to_vec()),
                 })
+            }
+        }
+    }
+}
+
+impl From<UpdateAccount> for DbAccountInfo {
+    fn from(update_account: UpdateAccount) -> Self {
+        match &update_account.account {
+            kafka_common::kafka_structs::KafkaReplicaAccountInfoVersions::V0_0_1(account_info) => {
+                DbAccountInfo {
+                    pubkey: account_info.pubkey.clone(),
+                    lamports: account_info.lamports as i64,
+                    owner: account_info.owner.clone(),
+                    executable: account_info.executable,
+                    rent_epoch: account_info.rent_epoch as i64,
+                    data: account_info.data.clone(),
+                    slot: update_account.slot as i64,
+                    write_version: account_info.write_version as i64,
+                    txn_signature: None,
+                }
+            }
+            kafka_common::kafka_structs::KafkaReplicaAccountInfoVersions::V0_0_2(account_info) => {
+                DbAccountInfo {
+                    pubkey: account_info.pubkey.clone(),
+                    lamports: account_info.lamports as i64,
+                    owner: account_info.owner.clone(),
+                    executable: account_info.executable,
+                    rent_epoch: account_info.rent_epoch as i64,
+                    data: account_info.data.clone(),
+                    slot: update_account.slot as i64,
+                    write_version: account_info.write_version as i64,
+                    txn_signature: account_info.txn_signature.map(|v| v.as_ref().to_vec()),
+                }
             }
         }
     }
@@ -654,6 +688,16 @@ impl From<&Reward> for DbReward {
             post_balance: reward.post_balance as i64,
             reward_type: reward.reward_type.map(|v| v.into()),
             commission: reward.commission.map(|v| v as i16),
+        }
+    }
+}
+
+impl From<NotifyBlockMetaData> for DbBlockInfo {
+    fn from(block: NotifyBlockMetaData) -> Self {
+        match block.block_info {
+            kafka_common::kafka_structs::KafkaReplicaBlockInfoVersions::V0_0_1(block) => {
+                block.into()
+            }
         }
     }
 }

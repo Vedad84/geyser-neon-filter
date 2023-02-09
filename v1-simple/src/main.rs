@@ -1,6 +1,5 @@
+mod app_config;
 mod build_info;
-mod config;
-mod config_hot_reload;
 mod consumer;
 mod consumer_stats;
 mod db;
@@ -9,28 +8,26 @@ mod db_statements;
 mod db_types;
 mod filter;
 mod filter_config;
+mod filter_config_hot_reload;
 mod prometheus;
 
 use std::sync::Arc;
 
 use crate::{
     build_info::get_build_info,
-    config_hot_reload::async_watch,
     consumer::consumer,
     consumer_stats::ContextWithStats,
     db_types::{DbAccountInfo, DbBlockInfo, DbTransaction},
-    filter::{block_filter, slot_filter, transaction_filter},
+    filter_config_hot_reload::async_watch,
 };
+use app_config::{env_build_config, AppConfig};
 use clap::{Arg, Command};
-use config::{env_build_config, AppConfig};
-use crossbeam_queue::SegQueue;
 use db::{db_stmt_executor, initialize_db_client};
 use fast_log::{
     consts::LogSize,
     plugin::{file_split::RollingType, packer::LogPacker},
     Logger,
 };
-use filter::account_filter;
 use filter_config::FilterConfig;
 use kafka_common::kafka_structs::{
     NotifyBlockMetaData, NotifyTransaction, UpdateAccount, UpdateSlotStatus,
@@ -95,63 +92,42 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
     let block_capacity = config.notify_block_queue_capacity();
     let transaction_capacity = config.notify_transaction_queue_capacity();
 
-    let db_account_queue: Arc<SegQueue<DbAccountInfo>> = Arc::new(SegQueue::new());
-    let db_slot_queue: Arc<SegQueue<UpdateSlotStatus>> = Arc::new(SegQueue::new());
-    let db_transaction_queue: Arc<SegQueue<DbTransaction>> = Arc::new(SegQueue::new());
-    let db_block_queue: Arc<SegQueue<DbBlockInfo>> = Arc::new(SegQueue::new());
-
     logger.set_level((&config.global_log_level).into());
 
     let client = initialize_db_client(config.clone()).await;
 
-    let (filter_account_tx, filter_account_rx) = flume::bounded::<UpdateAccount>(account_capacity);
-    let (filter_slot_tx, filter_slot_rx) = flume::bounded::<UpdateSlotStatus>(slot_capacity);
-    let (filter_transaction_tx, filter_transaction_rx) =
-        flume::bounded::<NotifyTransaction>(transaction_capacity);
-    let (filter_block_tx, filter_block_rx) = flume::bounded::<NotifyBlockMetaData>(block_capacity);
+    let (account_tx, account_rx) = flume::bounded::<DbAccountInfo>(account_capacity);
+    let (slot_tx, slot_rx) = flume::bounded::<UpdateSlotStatus>(slot_capacity);
+    let (transaction_tx, transaction_rx) = flume::bounded::<DbTransaction>(transaction_capacity);
+    let (block_tx, block_rx) = flume::bounded::<DbBlockInfo>(block_capacity);
 
     let cfg_watcher = tokio::spawn(async_watch(config.clone(), filter_config.clone()));
 
-    let account_filter = tokio::spawn(account_filter(
-        filter_config.clone(),
-        db_account_queue.clone(),
-        filter_account_rx,
-    ));
-
-    let transaction_filter = tokio::spawn(transaction_filter(
-        db_transaction_queue.clone(),
-        filter_transaction_rx,
-    ));
-
-    let block_filter = tokio::spawn(block_filter(db_block_queue.clone(), filter_block_rx));
-
-    let slot_filter = tokio::spawn(slot_filter(db_slot_queue.clone(), filter_slot_rx));
-
-    let consumer_update_account = tokio::spawn(consumer(
+    let consumer_update_account = tokio::spawn(consumer::<UpdateAccount, DbAccountInfo>(
         config.clone(),
         update_account_topic,
-        filter_account_tx,
+        account_tx.clone(),
         ctx_stats.clone(),
     ));
 
     let consumer_update_slot = tokio::spawn(consumer(
         config.clone(),
         update_slot_topic,
-        filter_slot_tx,
+        slot_tx.clone(),
         ctx_stats.clone(),
     ));
 
-    let consumer_transaction = tokio::spawn(consumer(
+    let consumer_transaction = tokio::spawn(consumer::<NotifyTransaction, DbTransaction>(
         config.clone(),
         notify_transaction_topic,
-        filter_transaction_tx,
+        transaction_tx.clone(),
         ctx_stats.clone(),
     ));
 
-    let consumer_notify_block = tokio::spawn(consumer(
+    let consumer_notify_block = tokio::spawn(consumer::<NotifyBlockMetaData, DbBlockInfo>(
         config.clone(),
         notify_block_topic,
-        filter_block_tx,
+        block_tx.clone(),
         ctx_stats.clone(),
     ));
 
@@ -159,10 +135,10 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
         config.clone(),
         client,
         ctx_stats.stats.clone(),
-        db_account_queue,
-        db_slot_queue,
-        db_transaction_queue,
-        db_block_queue,
+        (account_tx.clone(), account_rx.clone()),
+        (slot_tx.clone(), slot_rx.clone()),
+        (transaction_tx.clone(), transaction_rx.clone()),
+        (block_tx.clone(), block_rx.clone()),
     ));
 
     let _ = tokio::join!(
@@ -170,10 +146,6 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
         consumer_update_slot,
         consumer_transaction,
         consumer_notify_block,
-        account_filter,
-        transaction_filter,
-        block_filter,
-        slot_filter,
         db_stmt_executor,
         prometheus,
         cfg_watcher

@@ -51,45 +51,43 @@ pub async fn start_prometheus(
     );
 
     let registry_with_label = registry.sub_registry_with_label((
-        Cow::Borrowed("queue_len"),
+        Cow::Borrowed("topic"),
         Cow::from(update_account_topic.clone()),
     ));
 
     registry_with_label.register(
-        "queue_len_update_account",
+        "queue_len",
         "How many UpdateAccount messages queued up for processing",
         stats.queue_len_update_account.clone(),
     );
 
-    let registry_with_label = registry.sub_registry_with_label((
-        Cow::Borrowed("queue_len"),
-        Cow::from(update_slot_topic.clone()),
-    ));
+    let registry_with_label = registry
+        .sub_registry_with_label((Cow::Borrowed("topic"), Cow::from(update_slot_topic.clone())));
 
     registry_with_label.register(
-        "queue_len_update_slot",
+        "queue_len",
         "How many UpdateAccount messages queued up for processing",
         stats.queue_len_update_slot.clone(),
     );
 
     let registry_with_label = registry.sub_registry_with_label((
-        Cow::Borrowed("queue_len"),
+        Cow::Borrowed("topic"),
         Cow::from(notify_transaction_topic.clone()),
     ));
 
     registry_with_label.register(
-        "queue_len_notify_transaction",
+        "queue_len",
         "How many UpdateAccount messages queued up for processing",
         stats.queue_len_notify_transaction.clone(),
     );
 
     let registry_with_label = registry.sub_registry_with_label((
-        Cow::Borrowed("queue_len"),
+        Cow::Borrowed("topic"),
         Cow::from(notify_block_topic.clone()),
     ));
 
     registry_with_label.register(
-        "queue_len_notify_block",
+        "queue_len",
         "How many UpdateAccount messages queued up for processing",
         stats.queue_len_notify_block.clone(),
     );
@@ -112,7 +110,6 @@ pub async fn start_prometheus(
         stats.kafka_update_slot.clone(),
     );
 
-    // Not used for now
     let registry_with_label = registry
         .sub_registry_with_label((Cow::Borrowed("topic"), Cow::from(notify_transaction_topic)));
 

@@ -1407,7 +1407,6 @@ dependencies = [
  "build-info-build",
  "chrono",
  "clap",
- "crossbeam-queue",
  "fast_log",
  "flume",
  "hyper",

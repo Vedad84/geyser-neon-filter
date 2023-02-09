@@ -24,7 +24,6 @@ solana-transaction-status = { version = "=1.14.14" }
 solana-sdk = { version = "=1.14.14" }
 anyhow = "1.0.69"
 bs58 = "0.4.0"
-crossbeam-queue = "0.3.8"
 strum = "0.24"
 strum_macros = "0.24"
 build-info = { version = "0.0.29" }
