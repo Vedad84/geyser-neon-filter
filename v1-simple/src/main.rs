@@ -57,14 +57,6 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
 
     let ctx_stats = ContextWithStats::default();
 
-    let prometheus = tokio::spawn(start_prometheus(
-        ctx_stats.stats.clone(),
-        config.update_account_topic.clone(),
-        config.update_slot_topic.clone(),
-        config.notify_block_topic.clone(),
-        prometheus_port,
-    ));
-
     let update_slot_topic = config
         .update_slot_topic
         .take()
@@ -86,6 +78,16 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
         .expect("notify_block_topic is not present in config");
 
     let config = Arc::new(config);
+
+    let prometheus = tokio::spawn(start_prometheus(
+        ctx_stats.stats.clone(),
+        update_account_topic.clone(),
+        update_slot_topic.clone(),
+        notify_transaction_topic.clone(),
+        notify_block_topic.clone(),
+        prometheus_port,
+    ));
+
     let filter_config = Arc::new(RwLock::new(filter_config));
 
     let account_capacity = config.update_account_queue_capacity();
@@ -158,8 +160,9 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
         client,
         ctx_stats.stats.clone(),
         db_account_queue,
-        db_block_queue,
         db_slot_queue,
+        db_transaction_queue,
+        db_block_queue,
     ));
 
     let _ = tokio::join!(
