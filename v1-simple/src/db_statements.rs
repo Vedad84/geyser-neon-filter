@@ -1,16 +1,16 @@
 use anyhow::anyhow;
 use anyhow::Result;
-use std::sync::Arc;
-use tokio_postgres::{Client, Statement};
+use deadpool_postgres::Client;
+use tokio_postgres::Statement;
 
-pub async fn create_account_insert_statement(client: Arc<Client>) -> Result<Statement> {
+pub async fn create_account_insert_statement(client: &Client) -> Result<Statement> {
     let stmt = "INSERT INTO account AS acct (pubkey, slot, owner, lamports, executable, rent_epoch, data, write_version, updated_on, txn_signature) \
     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) \
     ON CONFLICT (pubkey) DO UPDATE SET slot=excluded.slot, owner=excluded.owner, lamports=excluded.lamports, executable=excluded.executable, rent_epoch=excluded.rent_epoch, \
     data=excluded.data, write_version=excluded.write_version, updated_on=excluded.updated_on, txn_signature=excluded.txn_signature  WHERE acct.slot < excluded.slot OR (\
     acct.slot = excluded.slot AND acct.write_version < excluded.write_version)";
 
-    let stmt = client.prepare(stmt).await;
+    let stmt = client.prepare_cached(stmt).await;
 
     match stmt {
         Ok(update_account_stmt) => Ok(update_account_stmt),
@@ -18,7 +18,7 @@ pub async fn create_account_insert_statement(client: Arc<Client>) -> Result<Stat
     }
 }
 
-pub async fn create_transaction_insert_statement(client: Arc<Client>) -> Result<Statement> {
+pub async fn create_transaction_insert_statement(client: &Client) -> Result<Statement> {
     let stmt =
         "INSERT INTO transaction AS txn (signature, is_vote, slot, message_type, legacy_message, \
         v0_loaded_message, signatures, message_hash, meta, write_version, updated_on) \
@@ -33,7 +33,7 @@ pub async fn create_transaction_insert_statement(client: Arc<Client>) -> Result<
         write_version=excluded.write_version, \
         updated_on=excluded.updated_on";
 
-    let stmt = client.prepare(stmt).await;
+    let stmt = client.prepare_cached(stmt).await;
 
     match stmt {
         Ok(transaction_insert_stmt) => Ok(transaction_insert_stmt),
@@ -41,13 +41,13 @@ pub async fn create_transaction_insert_statement(client: Arc<Client>) -> Result<
     }
 }
 
-pub async fn create_block_metadata_insert_statement(client: Arc<Client>) -> Result<Statement> {
+pub async fn create_block_metadata_insert_statement(client: &Client) -> Result<Statement> {
     let stmt =
         "INSERT INTO block (slot, blockhash, rewards, block_time, block_height, updated_on) \
     VALUES ($1, $2, $3, $4, $5, $6) \
     ON CONFLICT DO NOTHING";
 
-    let stmt = client.prepare(stmt).await;
+    let stmt = client.prepare_cached(stmt).await;
 
     match stmt {
         Ok(notify_block_metadata_stmt) => Ok(notify_block_metadata_stmt),
@@ -55,12 +55,12 @@ pub async fn create_block_metadata_insert_statement(client: Arc<Client>) -> Resu
     }
 }
 
-pub async fn create_slot_insert_statement_with_parent(client: Arc<Client>) -> Result<Statement> {
+pub async fn create_slot_insert_statement_with_parent(client: &Client) -> Result<Statement> {
     let stmt = "INSERT INTO slot (slot, parent, status, updated_on) \
     VALUES ($1, $2, $3, $4) \
     ON CONFLICT (slot) DO UPDATE SET parent=excluded.parent, status=excluded.status, updated_on=excluded.updated_on";
 
-    let stmt = client.prepare(stmt).await;
+    let stmt = client.prepare_cached(stmt).await;
 
     match stmt {
         Ok(notify_block_metadata_stmt) => Ok(notify_block_metadata_stmt),
@@ -68,12 +68,12 @@ pub async fn create_slot_insert_statement_with_parent(client: Arc<Client>) -> Re
     }
 }
 
-pub async fn create_slot_insert_statement_without_parent(client: Arc<Client>) -> Result<Statement> {
+pub async fn create_slot_insert_statement_without_parent(client: &Client) -> Result<Statement> {
     let stmt = "INSERT INTO slot (slot, status, updated_on) \
     VALUES ($1, $2, $3) \
     ON CONFLICT (slot) DO UPDATE SET status=excluded.status, updated_on=excluded.updated_on";
 
-    let stmt = client.prepare(stmt).await;
+    let stmt = client.prepare_cached(stmt).await;
 
     match stmt {
         Ok(notify_block_metadata_stmt) => Ok(notify_block_metadata_stmt),

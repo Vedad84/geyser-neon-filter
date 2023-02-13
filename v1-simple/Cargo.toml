@@ -17,6 +17,7 @@ kafka_common = { git = "https://github.com/neonlabsorg/geyser-neon-plugin.git", 
 log = "0.4.17"
 fast_log = { version = "1.5.51" }
 flume = "0.10.14"
+deadpool-postgres = { version = "0.10.5" }
 tokio-postgres = { version = "0.7.7", features = ["with-chrono-0_4"] }
 postgres-types = { version = "0.2.4", features = ["derive"] }
 solana-runtime = { version = "=1.14.14" }
