@@ -102,8 +102,15 @@ pub fn env_build_config() -> (AppConfig, FilterConfig) {
 
     let session_timeout_ms = env::var("SESSION_TIMEOUT_MS").expect("SESSION_TIMEOUT_MS is not set");
     let prometheus_port = env::var("PROMETHEUS_PORT").expect("PROMETHEUS_PORT is not set");
+
+    let queued_min_messages =
+        env::var("QUEUED_MIN_MESSAGES").expect("QUEUED_MIN_MESSAGES is not set");
+    let auto_commit_interval_ms =
+        env::var("AUTO_COMMIT_INTERVAL_MS").expect("AUTO_COMMIT_INTERVAL_MS is not set");
+    let fetch_min_bytes = env::var("FETCH_MIN_BYTES").expect("FETCH_MIN_BYTES is not set");
     let fetch_message_max_bytes =
         env::var("FETCH_MESSAGE_MAX_BYTES").expect("FETCH_MESSAGE_MAX_BYTES is not set");
+    let fetch_wait_max_ms = env::var("FETCH_WAIT_MAX_MS").expect("FETCH_WAIT_MAX_MS is not set");
 
     let filter_include_owners: AHashSet<String> = env::var("FILTER_INCLUDE_OWNERS")
         .expect("FILTER_INCLUDE_OWNERS is not set")
@@ -165,8 +172,12 @@ pub fn env_build_config() -> (AppConfig, FilterConfig) {
         update_slot_queue_capacity,
         notify_transaction_queue_capacity,
         notify_block_queue_capacity,
+        queued_min_messages,
         session_timeout_ms,
         fetch_message_max_bytes,
+        auto_commit_interval_ms,
+        fetch_min_bytes,
+        fetch_wait_max_ms,
         statistics_interval_ms,
         prometheus_port,
         kafka_log_level,
@@ -205,8 +216,12 @@ pub struct AppConfig {
     pub update_slot_queue_capacity: String,
     pub notify_transaction_queue_capacity: String,
     pub notify_block_queue_capacity: String,
+    pub queued_min_messages: String,
     pub session_timeout_ms: String,
+    pub auto_commit_interval_ms: String,
     pub fetch_message_max_bytes: String,
+    pub fetch_min_bytes: String,
+    pub fetch_wait_max_ms: String,
     pub statistics_interval_ms: String,
     pub prometheus_port: String,
     pub kafka_log_level: LogLevel,
