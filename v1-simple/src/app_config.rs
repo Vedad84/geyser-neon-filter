@@ -78,20 +78,28 @@ impl From<&GlobalLogLevel> for LevelFilter {
 pub fn env_build_config() -> (AppConfig, FilterConfig) {
     let filter_log_path = env::var("FILTER_LOG_PATH").expect("FILTER_LOG_PATH is not set");
     let bootstrap_servers = env::var("BOOTSTRAP_SERVERS").expect("BOOTSTRAP_SERVERS is not set");
+
     let kafka_consumer_group_id =
         env::var("KAFKA_CONSUMER_GROUP_ID").expect("KAFKA_CONSUMER_GROUP_ID is not set");
-    let postgres_connection_str =
-        env::var("POSTGRES_CONNECTION_STR").expect("POSTGRES_CONNECTION_STR is not set");
+    let postgres_host = env::var("POSTGRES_HOST").expect("POSTGRES_HOST is not set");
+    let postgres_port = env::var("POSTGRES_PORT").expect("POSTGRES_PORT is not set");
+    let postgres_user = env::var("POSTGRES_USER").expect("POSTGRES_USER is not set");
+    let postgres_password = env::var("POSTGRES_PASSWORD").expect("POSTGRES_PASSWORD is not set");
+    let postgres_db_name = env::var("POSTGRES_DB").expect("POSTGRES_DB is not set");
+    let postgres_pool_size = env::var("POSTGRES_POOL_SIZE").expect("POSTGRES_POOL_SIZE is not set");
+
     let sasl_username = env::var("SASL_USERNAME").expect("SASL_USERNAME is not set");
     let sasl_password = env::var("SASL_PASSWORD").expect("SASL_PASSWORD is not set");
     let sasl_mechanism = env::var("SASL_MECHANISM").expect("SASL_MECHANISM is not set");
     let security_protocol = env::var("SECURITY_PROTOCOL").expect("SECURITY_PROTOCOL is not set");
+
     let update_account_topic =
         env::var("UPDATE_ACCOUNT_TOPIC").expect("UPDATE_ACCOUNT_TOPIC is not set");
     let notify_transaction_topic =
         env::var("NOTIFY_TRANSACTION_TOPIC").expect("NOTIFY_TRANSACTION_TOPIC is not set");
     let notify_block_topic = env::var("NOTIFY_BLOCK_TOPIC").expect("NOTIFY_BLOCK_TOPIC is not set");
     let update_slot_topic = env::var("UPDATE_SLOT_TOPIC").expect("UPDATE_SLOT_TOPIC is not set");
+
     let session_timeout_ms = env::var("SESSION_TIMEOUT_MS").expect("SESSION_TIMEOUT_MS is not set");
     let prometheus_port = env::var("PROMETHEUS_PORT").expect("PROMETHEUS_PORT is not set");
     let fetch_message_max_bytes =
@@ -139,7 +147,12 @@ pub fn env_build_config() -> (AppConfig, FilterConfig) {
         filter_log_path,
         bootstrap_servers,
         kafka_consumer_group_id,
-        postgres_connection_str,
+        postgres_host,
+        postgres_port,
+        postgres_user,
+        postgres_password,
+        postgres_db_name,
+        postgres_pool_size,
         sasl_username,
         sasl_password,
         sasl_mechanism,
@@ -174,7 +187,12 @@ pub struct AppConfig {
     pub filter_log_path: String,
     pub bootstrap_servers: String,
     pub kafka_consumer_group_id: String,
-    pub postgres_connection_str: String,
+    pub postgres_host: String,
+    pub postgres_port: String,
+    pub postgres_user: String,
+    pub postgres_password: String,
+    pub postgres_db_name: String,
+    pub postgres_pool_size: String,
     pub sasl_username: String,
     pub sasl_password: String,
     pub sasl_mechanism: String,

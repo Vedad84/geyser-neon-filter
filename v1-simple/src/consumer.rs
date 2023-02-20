@@ -65,22 +65,20 @@ pub async fn process_message<T, S>(
 
         let result: serde_json::Result<T> = serde_json::from_str::<T>(payload);
 
-        tokio::spawn(async move {
-            match result {
-                Ok(event) => {
-                    let (received, queue_len) = get_counters(&stats, event.get_type());
-                    queue_len.set(filter_tx.len() as f64);
-                    received.inc();
-                    if let Err(e) = filter_tx.send_async(Into::<S>::into(event)).await {
-                        error!("Failed to send the data {type_name}, error {e}");
-                    }
-                }
-                Err(e) => {
-                    error!("Failed to deserialize {type_name} {e}");
-                    stats.kafka_errors_deserialize.inc();
+        match result {
+            Ok(event) => {
+                let (received, queue_len) = get_counters(&stats, event.get_type());
+                queue_len.set(filter_tx.len() as f64);
+                received.inc();
+                if let Err(e) = filter_tx.send_async(Into::<S>::into(event)).await {
+                    error!("Failed to send the data {type_name}, error {e}");
                 }
             }
-        });
+            Err(e) => {
+                error!("Failed to deserialize {type_name} {e}");
+                stats.kafka_errors_deserialize.inc();
+            }
+        }
     } else {
         error!("Extracted empty payload!");
     }

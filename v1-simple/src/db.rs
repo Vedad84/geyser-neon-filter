@@ -3,14 +3,16 @@ use std::time::Duration;
 
 use anyhow::Result;
 
+use deadpool_postgres::Client;
+use deadpool_postgres::Manager;
+use deadpool_postgres::ManagerConfig;
+use deadpool_postgres::Pool;
+use deadpool_postgres::RecyclingMethod;
 use flume::Receiver;
 use flume::Sender;
 use kafka_common::kafka_structs::UpdateSlotStatus;
 use log::error;
 use log::info;
-use log::warn;
-
-use tokio_postgres::Client;
 use tokio_postgres::NoTls;
 
 use crate::app_config::AppConfig;
@@ -29,36 +31,45 @@ use crate::db_types::DbAccountInfo;
 use crate::db_types::DbBlockInfo;
 use crate::db_types::DbTransaction;
 
-pub async fn initialize_db_client(config: Arc<AppConfig>) -> Arc<Client> {
-    let client;
-    let mut interval = tokio::time::interval(Duration::from_secs(2));
-    loop {
-        match connect_to_db(config.clone()).await {
-            Ok(c) => {
-                info!("A new Postgres client was created and successfully connected to the server");
-                client = c;
-                break;
-            }
-            Err(e) => {
-                error!("Failed to connect to the database, error: {e}",);
-                interval.tick().await;
-            }
-        };
+pub async fn create_db_pool(config: Arc<AppConfig>) -> Result<Arc<Pool>> {
+    let mut pg_config = tokio_postgres::Config::new();
+    pg_config.host(config.postgres_host.as_str());
+    pg_config.port(config.postgres_port.parse::<u16>()?);
+    pg_config.user(config.postgres_user.as_str());
+    pg_config.password(config.postgres_password.as_str());
+    pg_config.dbname(config.postgres_db_name.as_str());
+    pg_config.keepalives_idle(Duration::from_secs(3));
+
+    let pool_size = config.postgres_pool_size.parse().unwrap_or(96);
+
+    let mgr_config = ManagerConfig {
+        recycling_method: RecyclingMethod::Verified,
+    };
+
+    let mgr = Manager::from_config(pg_config, NoTls, mgr_config);
+    let pool = Pool::builder(mgr)
+        .max_size(pool_size)
+        .runtime(deadpool_postgres::Runtime::Tokio1)
+        .wait_timeout(Some(Duration::from_secs(10)))
+        .build()
+        .expect("Failed to create Postgres pool");
+
+    {
+        let _ = pool.get().await.unwrap_or_else(|e| {
+            panic!("Failed to get a client to the database, error: {e}");
+        });
     }
-    client
-}
 
-async fn connect_to_db(config: Arc<AppConfig>) -> Result<Arc<Client>> {
-    let (client, connection) =
-        tokio_postgres::connect(&config.postgres_connection_str, NoTls).await?;
+    if pool.status().available <= 0 {
+        anyhow::bail!("No available connections in the pool");
+    }
 
-    tokio::spawn(async move {
-        if let Err(e) = connection.await {
-            error!("Postgres connection error: {}", e);
-        }
-    });
+    info!(
+        "Created a database pool with {} connections",
+        pool.status().available
+    );
 
-    Ok(Arc::new(client))
+    Ok(Arc::new(pool))
 }
 
 async fn exec_account_statement(
@@ -68,7 +79,7 @@ async fn exec_account_statement(
     account_rx: Receiver<DbAccountInfo>,
 ) -> usize {
     if let Ok(db_account_info) = account_rx.recv_async().await {
-        let statement = match create_account_insert_statement(client.clone()).await {
+        let statement = match create_account_insert_statement(&client).await {
             Ok(s) => s,
             Err(e) => {
                 error!("Failed to execute create_account_insert_statement, error {e}");
@@ -80,7 +91,7 @@ async fn exec_account_statement(
             }
         };
 
-        if let Err(error) = insert_into_account_audit(&db_account_info, &statement, client).await {
+        if let Err(error) = insert_into_account_audit(&db_account_info, &statement, &client).await {
             error!("Failed to insert the data to account_audit, error: {error}");
             stats.db_errors.inc();
             // Push account_info back to the database queue
@@ -99,7 +110,7 @@ async fn exec_transaction_statement(
     transaction_rx: Receiver<DbTransaction>,
 ) -> usize {
     if let Ok(db_transaction_info) = transaction_rx.recv_async().await {
-        let statement = match create_transaction_insert_statement(client.clone()).await {
+        let statement = match create_transaction_insert_statement(&client).await {
             Ok(s) => s,
             Err(e) => {
                 error!("Failed to execute create_transaction_insert_statement, error {e}");
@@ -113,7 +124,7 @@ async fn exec_transaction_statement(
             }
         };
 
-        if let Err(error) = insert_into_transaction(&db_transaction_info, &statement, client).await
+        if let Err(error) = insert_into_transaction(&db_transaction_info, &statement, &client).await
         {
             error!("Failed to insert the data to transaction_audit, error: {error}");
             stats.db_errors.inc();
@@ -133,7 +144,7 @@ async fn exec_block_statement(
     block_rx: Receiver<DbBlockInfo>,
 ) -> usize {
     if let Ok(db_block_info) = block_rx.recv_async().await {
-        let statement = match create_block_metadata_insert_statement(client.clone()).await {
+        let statement = match create_block_metadata_insert_statement(&client).await {
             Ok(s) => s,
             Err(e) => {
                 error!("Failed to prepare create_block_metadata_insert_statement, error {e}");
@@ -145,7 +156,7 @@ async fn exec_block_statement(
             }
         };
 
-        if let Err(error) = insert_into_block_metadata(&db_block_info, &statement, client).await {
+        if let Err(error) = insert_into_block_metadata(&db_block_info, &statement, &client).await {
             error!("Failed to insert the data to block_metadata, error: {error}");
             stats.db_errors.inc();
             // Push block_info back to the database queue
@@ -165,13 +176,14 @@ async fn exec_slot_statement(
 ) -> usize {
     if let Ok(db_slot_info) = slot_rx.recv_async().await {
         let statement = match db_slot_info.parent {
-            Some(_) => create_slot_insert_statement_with_parent(client.clone()).await,
-            None => create_slot_insert_statement_without_parent(client.clone()).await,
+            Some(_) => create_slot_insert_statement_with_parent(&client).await,
+            None => create_slot_insert_statement_without_parent(&client).await,
         };
 
         match statement {
             Ok(statement) => {
-                if let Err(e) = insert_slot_status_internal(&db_slot_info, &statement, client).await
+                if let Err(e) =
+                    insert_slot_status_internal(&db_slot_info, &statement, &client).await
                 {
                     error!("Failed to execute insert_slot_status_internal, error {e}");
                     stats.db_errors.inc();
@@ -193,8 +205,7 @@ async fn exec_slot_statement(
 }
 
 pub async fn db_stmt_executor(
-    config: Arc<AppConfig>,
-    mut client: Arc<Client>,
+    db_pool: Arc<Pool>,
     stats: Arc<Stats>,
     account_queue: (Sender<DbAccountInfo>, Receiver<DbAccountInfo>),
     slot_queue: (Sender<UpdateSlotStatus>, Receiver<UpdateSlotStatus>),
@@ -209,74 +220,75 @@ pub async fn db_stmt_executor(
     let (block_tx, block_rx) = block_queue;
 
     loop {
-        if client.is_closed() {
-            warn!("Postgres client was unexpectedly closed");
-            client = initialize_db_client(config.clone()).await;
-        }
+        if let Ok(client) = db_pool.get().await {
+            let client = Arc::new(client);
 
-        if account_tx.is_empty()
-            && slot_tx.is_empty()
-            && transaction_tx.is_empty()
-            && block_tx.is_empty()
-        {
-            idle_interval.tick().await;
-        }
+            if account_tx.is_empty()
+                && slot_tx.is_empty()
+                && transaction_tx.is_empty()
+                && block_tx.is_empty()
+            {
+                idle_interval.tick().await;
+            }
 
-        if !account_rx.is_empty() {
-            let client = client.clone();
-            let stats = stats.clone();
-            let account_tx = account_tx.clone();
-            let account_rx = account_rx.clone();
+            if !account_rx.is_empty() {
+                let client = client.clone();
+                let stats = stats.clone();
+                let account_tx = account_tx.clone();
+                let account_rx = account_rx.clone();
 
-            tokio::spawn(async move {
-                let channel_len =
-                    exec_account_statement(client, stats.clone(), account_tx, account_rx).await;
-                stats.queue_len_update_slot.set(channel_len as f64);
-            });
-        }
+                tokio::spawn(async move {
+                    let channel_len =
+                        exec_account_statement(client, stats.clone(), account_tx, account_rx).await;
+                    stats.queue_len_update_account.set(channel_len as f64);
+                });
+            }
 
-        if !slot_rx.is_empty() {
-            let client = client.clone();
-            let stats = stats.clone();
-            let slot_tx = slot_tx.clone();
-            let slot_rx = slot_rx.clone();
+            if !slot_rx.is_empty() {
+                let client = client.clone();
+                let stats = stats.clone();
+                let slot_tx = slot_tx.clone();
+                let slot_rx = slot_rx.clone();
 
-            tokio::spawn(async move {
-                let channel_len =
-                    exec_slot_statement(client, stats.clone(), slot_tx, slot_rx).await;
-                stats.queue_len_update_slot.set(channel_len as f64);
-            });
-        }
+                tokio::spawn(async move {
+                    let channel_len =
+                        exec_slot_statement(client, stats.clone(), slot_tx, slot_rx).await;
+                    stats.queue_len_update_slot.set(channel_len as f64);
+                });
+            }
 
-        if !transaction_rx.is_empty() {
-            let client = client.clone();
-            let stats = stats.clone();
-            let transaction_tx = transaction_tx.clone();
-            let transaction_rx = transaction_rx.clone();
+            if !transaction_rx.is_empty() {
+                let client = client.clone();
+                let stats = stats.clone();
+                let transaction_tx = transaction_tx.clone();
+                let transaction_rx = transaction_rx.clone();
 
-            tokio::spawn(async move {
-                let channel_len = exec_transaction_statement(
-                    client,
-                    stats.clone(),
-                    transaction_tx,
-                    transaction_rx,
-                )
-                .await;
-                stats.queue_len_notify_transaction.set(channel_len as f64);
-            });
-        }
+                tokio::spawn(async move {
+                    let channel_len = exec_transaction_statement(
+                        client,
+                        stats.clone(),
+                        transaction_tx,
+                        transaction_rx,
+                    )
+                    .await;
+                    stats.queue_len_notify_transaction.set(channel_len as f64);
+                });
+            }
 
-        if !block_rx.is_empty() {
-            let client = client.clone();
-            let stats = stats.clone();
-            let block_tx = block_tx.clone();
-            let block_rx = block_rx.clone();
+            if !block_rx.is_empty() {
+                let client = client.clone();
+                let stats = stats.clone();
+                let block_tx = block_tx.clone();
+                let block_rx = block_rx.clone();
 
-            tokio::spawn(async move {
-                let channel_len =
-                    exec_block_statement(client, stats.clone(), block_tx, block_rx).await;
-                stats.queue_len_notify_block.set(channel_len as f64);
-            });
+                tokio::spawn(async move {
+                    let channel_len =
+                        exec_block_statement(client, stats.clone(), block_tx, block_rx).await;
+                    stats.queue_len_notify_block.set(channel_len as f64);
+                });
+            }
+        } else {
+            error!("Failed to get a client from the pool");
         }
     }
 }

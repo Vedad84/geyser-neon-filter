@@ -1,9 +1,9 @@
 use anyhow::anyhow;
 use anyhow::Result;
 use chrono::Utc;
+use deadpool_postgres::Client;
 use kafka_common::kafka_structs::UpdateSlotStatus;
-use std::sync::Arc;
-use tokio_postgres::{Client, Statement};
+use tokio_postgres::Statement;
 
 use crate::db_types::DbAccountInfo;
 use crate::db_types::DbBlockInfo;
@@ -12,7 +12,7 @@ use crate::db_types::DbTransaction;
 pub async fn insert_into_account_audit(
     account: &DbAccountInfo,
     statement: &Statement,
-    client: Arc<Client>,
+    client: &Client,
 ) -> Result<()> {
     let updated_on = Utc::now().naive_utc();
     if let Err(error) = client
@@ -44,7 +44,7 @@ pub async fn insert_into_account_audit(
 pub async fn insert_into_transaction(
     transaction: &DbTransaction,
     statement: &Statement,
-    client: Arc<Client>,
+    client: &Client,
 ) -> Result<()> {
     let updated_on = Utc::now().naive_utc();
 
@@ -78,7 +78,7 @@ pub async fn insert_into_transaction(
 pub async fn insert_into_block_metadata(
     block_info: &DbBlockInfo,
     statement: &Statement,
-    client: Arc<Client>,
+    client: &Client,
 ) -> Result<()> {
     let updated_on = Utc::now().naive_utc();
 
@@ -107,7 +107,7 @@ pub async fn insert_into_block_metadata(
 pub async fn insert_slot_status_internal(
     update_slot: &UpdateSlotStatus,
     statement: &Statement,
-    client: Arc<Client>,
+    client: &Client,
 ) -> Result<()> {
     let updated_on = Utc::now().naive_utc();
     let status_str = update_slot.status.to_string();

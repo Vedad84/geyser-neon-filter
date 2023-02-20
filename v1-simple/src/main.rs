@@ -17,12 +17,13 @@ use crate::{
     build_info::get_build_info,
     consumer::consumer,
     consumer_stats::ContextWithStats,
+    db::create_db_pool,
     db_types::{DbAccountInfo, DbBlockInfo, DbTransaction},
     filter_config_hot_reload::async_watch,
 };
 use app_config::{env_build_config, AppConfig};
 use clap::{Arg, Command};
-use db::{db_stmt_executor, initialize_db_client};
+use db::db_stmt_executor;
 use fast_log::{
     consts::LogSize,
     plugin::{file_split::RollingType, packer::LogPacker},
@@ -94,7 +95,9 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
 
     logger.set_level((&config.global_log_level).into());
 
-    let client = initialize_db_client(config.clone()).await;
+    let db_pool = create_db_pool(config.clone())
+        .await
+        .unwrap_or_else(|e| panic!("Failed to create db pool, error: {e}"));
 
     let (account_tx, account_rx) = flume::bounded::<DbAccountInfo>(account_capacity);
     let (slot_tx, slot_rx) = flume::bounded::<UpdateSlotStatus>(slot_capacity);
@@ -132,8 +135,7 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
     ));
 
     let db_stmt_executor = tokio::spawn(db_stmt_executor(
-        config.clone(),
-        client,
+        db_pool,
         ctx_stats.stats.clone(),
         (account_tx.clone(), account_rx.clone()),
         (slot_tx.clone(), slot_rx.clone()),
@@ -156,7 +158,7 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
 async fn main() {
     let app = Command::new("geyser-neon-filter")
         .version("1.0")
-        .about("Neonlabs filtering service")
+        .about("Neon Kafka filtering service")
         .arg(
             Arg::new("config")
                 .short('c')
