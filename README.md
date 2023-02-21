@@ -30,8 +30,12 @@ An example of application configuration file looks like the following:
     "update_slot_queue_capacity": "2000",
     "notify_transaction_queue_capacity": "2000",
     "notify_block_queue_capacity": "2000",
+    "queued_min_messages": "20000",
+    "auto_commit_interval_ms": "5000",
     "session_timeout_ms": "45000",
-    "fetch_message_max_bytes": "104857600",
+    "fetch_message_max_bytes": "1000000000",
+    "fetch_min_bytes": "100000000",
+    "fetch_wait_max_ms": "100",
     "statistics_interval_ms" : "0",
     "prometheus_port": "9090",
     "kafka_log_level": "Info",
@@ -67,9 +71,10 @@ NOTIFY_BLOCK_QUEUE_CAPACITY="2000"
 QUEUED_MIN_MESSAGES="20000"
 AUTO_COMMIT_INTERVAL_MS="5000"
 FETCH_MIN_BYTES="104857600"
-FETCH_WAIT_MAX_MS="200"
+FETCH_WAIT_MAX_MS="100"
 SESSION_TIMEOUT_MS="45000"
-FETCH_MESSAGE_MAX_BYTES="104857600"
+FETCH_MESSAGE_MAX_BYTES="1000000000"
+FETCH_MIN_BYTES="100000000"
 FILTER_INCLUDE_OWNERS="owner_base58,owner2_base58"
 FILTER_INCLUDE_PUBKEYS="pubkey_base58,pubkey2_base58"
 STATISTICS_INTERVAL_MS="0"

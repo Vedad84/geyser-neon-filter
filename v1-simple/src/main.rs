@@ -108,6 +108,7 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
 
     let consumer_update_account = tokio::spawn(consumer::<UpdateAccount, DbAccountInfo>(
         config.clone(),
+        filter_config.clone(),
         update_account_topic,
         account_tx.clone(),
         ctx_stats.clone(),
@@ -115,6 +116,7 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
 
     let consumer_update_slot = tokio::spawn(consumer(
         config.clone(),
+        filter_config.clone(),
         update_slot_topic,
         slot_tx.clone(),
         ctx_stats.clone(),
@@ -122,6 +124,7 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
 
     let consumer_transaction = tokio::spawn(consumer::<NotifyTransaction, DbTransaction>(
         config.clone(),
+        filter_config.clone(),
         notify_transaction_topic,
         transaction_tx.clone(),
         ctx_stats.clone(),
@@ -129,6 +132,7 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
 
     let consumer_notify_block = tokio::spawn(consumer::<NotifyBlockMetaData, DbBlockInfo>(
         config.clone(),
+        filter_config.clone(),
         notify_block_topic,
         block_tx.clone(),
         ctx_stats.clone(),

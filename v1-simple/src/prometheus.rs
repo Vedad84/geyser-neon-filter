@@ -27,6 +27,12 @@ pub async fn start_prometheus(
     let mut registry = <Registry>::default();
 
     registry.register(
+        "filtered_events",
+        "How many events were skipped by filter",
+        stats.filtered_events.clone(),
+    );
+
+    registry.register(
         "kafka_bytes_received",
         "How many bytes were received from Kafka cluster",
         stats.kafka_bytes_rx.clone(),

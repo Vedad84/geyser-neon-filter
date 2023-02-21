@@ -6,6 +6,7 @@ use rdkafka::{consumer::ConsumerContext, ClientContext, Statistics};
 
 #[derive(Default)]
 pub struct Stats {
+    pub filtered_events: Counter<u64, AtomicU64>,
     pub kafka_update_account: Counter<u64, AtomicU64>,
     pub kafka_update_slot: Counter<u64, AtomicU64>,
     pub kafka_notify_transaction: Counter<u64, AtomicU64>,
