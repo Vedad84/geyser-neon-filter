@@ -55,9 +55,13 @@ pub async fn create_db_pool(config: Arc<AppConfig>) -> Result<Arc<Pool>> {
         .expect("Failed to create Postgres pool");
 
     {
-        let _ = pool.get().await.unwrap_or_else(|e| {
-            panic!("Failed to get a client to the database, error: {e}");
-        });
+        let mut clients = vec![];
+        for _ in 0..pool.status().max_size {
+            let client = pool.get().await.unwrap_or_else(|e| {
+                panic!("Failed to get a client to the database, error: {e}");
+            });
+            clients.push(client);
+        }
     }
 
     if pool.status().available <= 0 {

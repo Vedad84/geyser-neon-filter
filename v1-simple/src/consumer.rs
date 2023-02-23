@@ -1,10 +1,5 @@
-use std::sync::{
-    atomic::{AtomicU64, Ordering},
-    Arc,
-};
-
 use flume::Sender;
-use kafka_common::message_type::{GetMessageType, MessageType};
+use kafka_common::message_type::{EventType, GetEvent, GetMessageType, MessageType};
 use log::{error, info};
 use prometheus_client::metrics::{counter::Counter, gauge::Gauge};
 use rdkafka::{
@@ -13,10 +8,17 @@ use rdkafka::{
     ClientConfig, Message,
 };
 use serde::Deserialize;
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Arc,
+};
+use tokio::sync::RwLock;
 
 use crate::{
     app_config::AppConfig,
     consumer_stats::{ContextWithStats, Stats},
+    filter::{process_account_info, process_transaction_info},
+    filter_config::FilterConfig,
 };
 
 pub fn extract_from_message<'a>(message: &'a BorrowedMessage<'a>) -> Option<&'a str> {
@@ -48,12 +50,28 @@ pub fn get_counters(
     }
 }
 
+async fn process_event<'a>(
+    filter_config: Arc<RwLock<FilterConfig>>,
+    event: &'a EventType<'a>,
+) -> bool {
+    match event {
+        EventType::UpdateAccount(update_account) => {
+            process_account_info(filter_config, update_account).await
+        }
+        EventType::NotifyTransaction(notify_transaction) => {
+            process_transaction_info(filter_config, notify_transaction).await
+        }
+        _ => true,
+    }
+}
+
 pub async fn process_message<T, S>(
+    filter_config: Arc<RwLock<FilterConfig>>,
     message: BorrowedMessage<'_>,
     filter_tx: Sender<S>,
     stats: Arc<Stats>,
 ) where
-    T: for<'a> Deserialize<'a> + Send + 'static + GetMessageType,
+    T: for<'a> Deserialize<'a> + Send + 'static + GetMessageType + GetEvent,
     S: From<T> + Send + 'static,
 {
     if let Some(payload) = extract_from_message(&message) {
@@ -67,9 +85,16 @@ pub async fn process_message<T, S>(
 
         match result {
             Ok(event) => {
+                let event_inner_type = event.as_ref();
+                if !process_event(filter_config.clone(), &event_inner_type).await {
+                    stats.filtered_events.inc();
+                    return;
+                }
+
                 let (received, queue_len) = get_counters(&stats, event.get_type());
                 queue_len.set(filter_tx.len() as f64);
                 received.inc();
+
                 if let Err(e) = filter_tx.send_async(Into::<S>::into(event)).await {
                     error!("Failed to send the data {type_name}, error {e}");
                 }
@@ -86,11 +111,12 @@ pub async fn process_message<T, S>(
 
 pub async fn consumer<T, S>(
     config: Arc<AppConfig>,
+    filter_config: Arc<RwLock<FilterConfig>>,
     topic: String,
     filter_tx: Sender<S>,
     ctx_stats: ContextWithStats,
 ) where
-    T: for<'a> Deserialize<'a> + Send + 'static + GetMessageType,
+    T: for<'a> Deserialize<'a> + Send + 'static + GetMessageType + GetEvent,
     S: From<T> + Send + 'static,
 {
     let type_name = std::any::type_name::<T>();
@@ -124,7 +150,13 @@ pub async fn consumer<T, S>(
     loop {
         match consumer.recv().await {
             Ok(message) => {
-                process_message(message, filter_tx.clone(), stats.clone()).await;
+                process_message(
+                    filter_config.clone(),
+                    message,
+                    filter_tx.clone(),
+                    stats.clone(),
+                )
+                .await;
             }
             Err(e) => {
                 stats.kafka_errors_consumer.inc();

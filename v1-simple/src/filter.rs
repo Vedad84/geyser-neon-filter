@@ -3,13 +3,13 @@ use std::{slice::Iter, sync::Arc};
 use crate::filter_config::FilterConfig;
 use kafka_common::kafka_structs::{
     KafkaReplicaAccountInfoVersions, KafkaReplicaTransactionInfoVersions, KafkaSanitizedMessage,
-    UpdateAccount,
+    NotifyTransaction, UpdateAccount,
 };
 use solana_sdk::{message::v0::LoadedAddresses, pubkey::Pubkey};
 use tokio::sync::RwLock;
 
 #[inline(always)]
-async fn _check_account<'a>(
+async fn check_account<'a>(
     config: Arc<RwLock<FilterConfig>>,
     owner: Option<&'a [u8]>,
     pubkey: &'a [u8],
@@ -29,14 +29,14 @@ async fn _check_account<'a>(
     false
 }
 
-fn _account_keys(message: &KafkaSanitizedMessage) -> Iter<'_, Pubkey> {
+fn account_keys(message: &KafkaSanitizedMessage) -> Iter<'_, Pubkey> {
     match message {
         KafkaSanitizedMessage::Legacy(message) => message.message.account_keys.iter(),
         KafkaSanitizedMessage::V0(message) => message.message.account_keys.iter(),
     }
 }
 
-fn _loaded_addresses(message: &KafkaSanitizedMessage) -> LoadedAddresses {
+fn loaded_addresses(message: &KafkaSanitizedMessage) -> LoadedAddresses {
     match message {
         KafkaSanitizedMessage::Legacy(_) => LoadedAddresses::default(),
         KafkaSanitizedMessage::V0(message) => LoadedAddresses::clone(&message.loaded_addresses),
@@ -44,23 +44,23 @@ fn _loaded_addresses(message: &KafkaSanitizedMessage) -> LoadedAddresses {
 }
 
 #[inline(always)]
-async fn _check_transaction(
+async fn check_transaction(
     config: Arc<RwLock<FilterConfig>>,
     transaction_info: &KafkaReplicaTransactionInfoVersions,
 ) -> bool {
     let (keys, loaded_addresses) = match transaction_info {
         KafkaReplicaTransactionInfoVersions::V0_0_1(replica) => (
-            _account_keys(&replica.transaction.message),
-            _loaded_addresses(&replica.transaction.message),
+            account_keys(&replica.transaction.message),
+            loaded_addresses(&replica.transaction.message),
         ),
         KafkaReplicaTransactionInfoVersions::V0_0_2(replica) => (
-            _account_keys(&replica.transaction.message),
-            _loaded_addresses(&replica.transaction.message),
+            account_keys(&replica.transaction.message),
+            loaded_addresses(&replica.transaction.message),
         ),
     };
 
     for i in keys {
-        if _check_account(config.clone(), None, &i.to_bytes()).await {
+        if check_account(config.clone(), None, &i.to_bytes()).await {
             return true;
         }
     }
@@ -71,7 +71,7 @@ async fn _check_transaction(
         .chain(loaded_addresses.readonly.iter());
 
     for i in pubkey_iter {
-        if _check_account(config.clone(), None, &i.to_bytes()).await {
+        if check_account(config.clone(), None, &i.to_bytes()).await {
             return true;
         }
     }
@@ -79,19 +79,21 @@ async fn _check_transaction(
     false
 }
 
-pub async fn _process_transaction_info(
+pub async fn process_transaction_info(
     config: Arc<RwLock<FilterConfig>>,
-    notify_transaction: &KafkaReplicaTransactionInfoVersions,
+    transaction: &NotifyTransaction,
 ) -> bool {
-    match notify_transaction {
+    match &transaction.transaction_info {
         KafkaReplicaTransactionInfoVersions::V0_0_1(transaction_replica) => {
-            if !transaction_replica.is_vote && _check_transaction(config, notify_transaction).await
+            if !transaction_replica.is_vote
+                && check_transaction(config, &transaction.transaction_info).await
             {
                 return true;
             }
         }
         KafkaReplicaTransactionInfoVersions::V0_0_2(transaction_replica) => {
-            if !transaction_replica.is_vote && _check_transaction(config, notify_transaction).await
+            if !transaction_replica.is_vote
+                && check_transaction(config, &transaction.transaction_info).await
             {
                 return true;
             }
@@ -100,14 +102,14 @@ pub async fn _process_transaction_info(
     false
 }
 
-pub async fn _process_account_info(
+pub async fn process_account_info(
     config: Arc<RwLock<FilterConfig>>,
     update_account: &UpdateAccount,
 ) -> bool {
     match &update_account.account {
         // for 1.13.x or earlier
         KafkaReplicaAccountInfoVersions::V0_0_1(account_info) => {
-            if _check_account(
+            if check_account(
                 config,
                 Some(account_info.owner.as_slice()),
                 account_info.pubkey.as_slice(),
@@ -118,7 +120,7 @@ pub async fn _process_account_info(
             }
         }
         KafkaReplicaAccountInfoVersions::V0_0_2(account_info) => {
-            if _check_account(
+            if check_account(
                 config,
                 Some(account_info.owner.as_slice()),
                 account_info.pubkey.as_slice(),
