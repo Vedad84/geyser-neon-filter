@@ -9,7 +9,7 @@ networks:
           gateway: 10.1.0.1
 
 x-clickhouse-common: &clickhouse-common
-  image: docker.io/clickhouse/clickhouse-server:22.12.3.5-alpine
+  image: docker.io/clickhouse/clickhouse-server:23.2.1.2537-alpine
   ulimits:
     nproc: 65535
     nofile:
@@ -24,10 +24,12 @@ services:
     <<: *clickhouse-common
     container_name: clickhouse01
     hostname: clickhouse01
+    expose:
+      - 9009
+      - 9234
+      - 9181
     ports:
       - 9000:9000
-      - 8123:8123
-      - 9181:9181
     networks:
       network:
         ipv4_address: 10.1.0.2
@@ -44,10 +46,12 @@ services:
     <<: *clickhouse-common
     container_name: clickhouse02
     hostname: clickhouse02
+    expose:
+      - 9009
+      - 9234
+      - 9181
     ports:
       - 9001:9000
-      - 8124:8123
-      - 9182:9181
     networks:
       network:
         ipv4_address: 10.1.0.3
@@ -64,10 +68,12 @@ services:
     <<: *clickhouse-common
     container_name: clickhouse03
     hostname: clickhouse03
+    expose:
+      - 9009
+      - 9234
+      - 9181
     ports:
       - 9002:9000
-      - 8125:8123
-      - 9183:9181
     networks:
       network:
         ipv4_address: 10.1.0.4
@@ -84,10 +90,12 @@ services:
     <<: *clickhouse-common
     container_name: clickhouse04
     hostname: clickhouse04
+    expose:
+      - 9009
+      - 9234
+      - 9181
     ports:
       - 9003:9000
-      - 8126:8123
-      - 9184:9181
     networks:
       network:
         ipv4_address: 10.1.0.5
@@ -100,7 +108,7 @@ services:
       - "./clickhouse/configs/common/date_time_input_format.xml:/etc/clickhouse-server/config.d/date_time_input_format.xml"
       - "./clickhouse/configs/common/log_to_console.xml:/etc/clickhouse-server/config.d/log_to_console.xml"
   kafka:
-    image: docker.io/bitnami/kafka:3.3.1
+    image: docker.io/bitnami/kafka:3.4.0
     container_name: kafka
     hostname: kafka
     environment:
@@ -139,7 +147,7 @@ services:
       retries: 3
 
   kafka-ui:
-    image: provectuslabs/kafka-ui:v0.4.0
+    image: provectuslabs/kafka-ui:v0.5.0
     container_name: kafka-ui
     ports:
       - "8080:8080"
@@ -155,7 +163,7 @@ services:
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
 
   kafka-producer:
-    image: docker.io/bitnami/kafka:3.3.1
+    image: docker.io/bitnami/kafka:3.4.0
     user: 0:0
     restart: "no"
     command:
@@ -168,10 +176,10 @@ services:
         kafka-topics.sh --bootstrap-server kafka:29092 --create --if-not-exists --topic notify_block --config compression.type=lz4 --config max.message.bytes=104857600
         kafka-topics.sh --bootstrap-server kafka:29092 --create --if-not-exists --topic notify_transaction --config compression.type=lz4 --config max.message.bytes=104857600
         kafka-topics.sh --bootstrap-server kafka:29092 --create --if-not-exists --topic update_account --config compression.type=lz4 --config max.message.bytes=104857600
-        kafka-console-producer.sh --broker-list kafka:29092 --producer.config /etc/kafka/conf/producer.properties --topic update_slot --property "parse.key=true" < /var/json-data/update_slot.topic
-        kafka-console-producer.sh --broker-list kafka:29092 --producer.config /etc/kafka/conf/producer.properties --topic notify_block --property "parse.key=true" < /var/json-data/notify_block.topic
-        kafka-console-producer.sh --broker-list kafka:29092 --producer.config /etc/kafka/conf/producer.properties --topic notify_transaction --property "parse.key=true" < /var/json-data/notify_transaction.topic
-        kafka-console-producer.sh --broker-list kafka:29092 --producer.config /etc/kafka/conf/producer.properties --topic update_account --property "parse.key=true" < /var/json-data/update_account.topic
+        kafka-console-producer.sh --broker-list kafka:29092 --producer.config /etc/kafka/conf/producer.properties --topic update_slot --property "key.separator= " --property "parse.key=true" < /var/json-data/update_slot.topic
+        kafka-console-producer.sh --broker-list kafka:29092 --producer.config /etc/kafka/conf/producer.properties --topic notify_block --property "key.separator= " --property "parse.key=true" < /var/json-data/notify_block.topic
+        kafka-console-producer.sh --broker-list kafka:29092 --producer.config /etc/kafka/conf/producer.properties --topic notify_transaction --property "key.separator= " --property "parse.key=true" < /var/json-data/notify_transaction.topic
+        kafka-console-producer.sh --broker-list kafka:29092 --producer.config /etc/kafka/conf/producer.properties --topic update_account --property "key.separator= " --property "parse.key=true" < /var/json-data/update_account.topic
     volumes:
       - ./json-data/kafka_topics.7z:/var/json-data/kafka_topics.7z
       - ./producer.properties:/etc/kafka/conf/producer.properties
@@ -183,7 +191,7 @@ services:
         ipv4_address: 10.1.0.8
 
   clickhouse-client:
-    image: docker.io/clickhouse/clickhouse-server:22.12.1.1752-alpine
+    image: docker.io/clickhouse/clickhouse-server:23.2.1.2537-alpine
     restart: "no"
     volumes:
       - ./clickhouse:/var/clickhouse
