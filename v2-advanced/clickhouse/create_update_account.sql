@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS events.update_account_queue ON CLUSTER '{cluster}' (
     kafka_num_consumers = 1,
     kafka_format = 'JSONEachRow';
 
-CREATE MATERIALIZED VIEW IF NOT EXISTS events.update_account_queue_mv ON CLUSTER '{cluster}' to events.update_account_local
+CREATE MATERIALIZED VIEW IF NOT EXISTS events.update_account_queue_mv ON CLUSTER '{cluster}' to events.update_account_distributed
 AS  SELECT pubkey,
            lamports,
            owner,

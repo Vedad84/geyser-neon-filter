@@ -28,7 +28,7 @@ kafka_num_consumers = 1,
 kafka_format = 'JSONEachRow';
 
 -- ENGINE Should be ReplicatedSummingMergeTree?
-CREATE MATERIALIZED VIEW IF NOT EXISTS events.update_slot_queue_mv ON CLUSTER '{cluster}' to events.update_slot_local AS
+CREATE MATERIALIZED VIEW IF NOT EXISTS events.update_slot_queue_mv ON CLUSTER '{cluster}' to events.update_slot_distributed AS
 SELECT slot,
     parent,
     slot_status,

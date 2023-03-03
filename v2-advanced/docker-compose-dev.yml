@@ -9,7 +9,7 @@ networks:
           gateway: 10.1.0.1
 
 x-clickhouse-common: &clickhouse-common
-  image: docker.io/clickhouse/clickhouse-server:23.2.1.2537-alpine
+  image: docker.io/clickhouse/clickhouse-server:23.2.2.20-alpine
   ulimits:
     nproc: 65535
     nofile:
@@ -195,7 +195,7 @@ services:
         ipv4_address: 10.1.0.8
 
   clickhouse-client:
-    image: docker.io/clickhouse/clickhouse-server:23.2.1.2537-alpine
+    image: docker.io/clickhouse/clickhouse-server:23.2.2.20-alpine
     restart: "no"
     volumes:
       - ./clickhouse:/var/clickhouse
