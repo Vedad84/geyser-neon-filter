@@ -28,6 +28,7 @@ services:
       - 9009
       - 9234
       - 9181
+      - 9000
     ports:
       - 9000:9000
     networks:
@@ -50,6 +51,7 @@ services:
       - 9009
       - 9234
       - 9181
+      - 9000
     ports:
       - 9001:9000
     networks:
@@ -72,6 +74,7 @@ services:
       - 9009
       - 9234
       - 9181
+      - 9000
     ports:
       - 9002:9000
     networks:
@@ -94,6 +97,7 @@ services:
       - 9009
       - 9234
       - 9181
+      - 9000
     ports:
       - 9003:9000
     networks:
