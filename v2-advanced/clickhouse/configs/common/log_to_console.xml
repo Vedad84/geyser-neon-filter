@@ -1,8 +1,8 @@
-<yandex>
+<clickhouse>
     <logger>
         <level>information</level>
         <console>true</console>
         <log remove="remove"/>
         <errorlog remove="remove"/>
     </logger>
-</yandex>
+</clickhouse>

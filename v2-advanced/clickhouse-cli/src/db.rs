@@ -3,24 +3,27 @@ use anyhow::Result;
 use clickhouse::{Client, Row};
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
+use time::OffsetDateTime;
 
 use crate::parse::SlotOrHash;
 use crate::parse::SlotOrSignature;
 use crate::parse::VersionOrPubkey;
 
-#[derive(Debug, Default, Row, Serialize, Deserialize)]
+#[derive(Debug, Row, Serialize, Deserialize)]
 pub struct BlockInfo {
     block_json: String,
-    retrieved_time: String,
+    #[serde(with = "clickhouse::serde::time::datetime64::nanos")]
+    pub retrieved_time: OffsetDateTime,
 }
 
-#[derive(Debug, Default, Row, Serialize, Deserialize)]
+#[derive(Debug, Row, Serialize, Deserialize)]
 pub struct TransactionInfo {
     transaction_json: String,
-    retrieved_time: String,
+    #[serde(with = "clickhouse::serde::time::datetime64::nanos")]
+    pub retrieved_time: OffsetDateTime,
 }
 
-#[derive(Debug, Default, Row, Serialize, Deserialize)]
+#[derive(Debug, Row, Serialize, Deserialize)]
 pub struct UpdateAccountInfo {
     pubkey: Vec<u8>,
     lamports: u64,
@@ -32,7 +35,8 @@ pub struct UpdateAccountInfo {
     txn_signature: Vec<u8>,
     slot: u64,
     is_startup: bool,
-    retrieved_time: String,
+    #[serde(with = "clickhouse::serde::time::datetime64::nanos")]
+    pub retrieved_time: OffsetDateTime,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize_repr, Deserialize_repr)]
@@ -48,7 +52,8 @@ pub struct UpdateSlot {
     pub slot: u64,
     pub parent: Option<u64>,
     pub status: SlotStatus,
-    pub retrieved_time: String,
+    #[serde(with = "clickhouse::serde::time::datetime64::nanos")]
+    pub retrieved_time: OffsetDateTime,
 }
 
 #[derive(Debug, Row, Serialize, Deserialize)]
@@ -73,7 +78,7 @@ pub struct TableRowCount {
 }
 
 pub async fn fetch_block_info(client: &Client, soh: &SlotOrHash) -> Result<BlockInfo> {
-    let query = "SELECT notify_block_json, toString(retrieved_time) FROM events.notify_block_local WHERE (slot = toUInt64(?) OR hash = toString(?))";
+    let query = "SELECT notify_block_json, retrieved_time FROM events.notify_block_distributed WHERE (slot = toUInt64(?) OR hash = toString(?))";
     if let (Some(slot), Some(hash)) = (soh.slot, soh.hash.as_ref()) {
         client
             .query(query)
@@ -108,7 +113,7 @@ pub async fn fetch_transaction_info(
     sos: &SlotOrSignature,
 ) -> Result<TransactionInfo> {
     let empty_vec: Vec<u8> = vec![];
-    let query = "SELECT notify_transaction_json, toString(retrieved_time) FROM events.notify_transaction_local WHERE slot = ? OR signature = ?";
+    let query = "SELECT notify_transaction_json, retrieved_time FROM events.notify_transaction_distributed WHERE slot = ? OR signature = ?";
     if let (Some(slot), Some(signature)) = (sos.slot, sos.signature.as_ref()) {
         client
             .query(query)
@@ -143,8 +148,8 @@ pub async fn fetch_update_account(
     vop: &VersionOrPubkey,
 ) -> Result<UpdateAccountInfo> {
     let empty_vec: Vec<u8> = vec![];
-    let query = "SELECT pubkey, lamports, owner, executable, rent_epoch, data, write_version, txn_signature, slot, is_startup, toString(retrieved_time)
-                FROM events.update_account_local
+    let query = "SELECT pubkey, lamports, owner, executable, rent_epoch, data, write_version, txn_signature, slot, is_startup, retrieved_time
+                FROM events.update_account_distributed
                 WHERE write_version = ? OR pubkey = ?";
     if let (Some(write_version), Some(pubkey)) = (vop.write_version, vop.pubkey.as_ref()) {
         client
@@ -176,8 +181,8 @@ pub async fn fetch_update_account(
 }
 
 pub async fn fetch_update_slot(client: &Client, slot: u64) -> Result<UpdateSlot> {
-    let query = "SELECT slot, parent, slot_status, toString(retrieved_time)
-    FROM events.update_slot_local
+    let query = "SELECT slot, parent, slot_status, retrieved_time
+    FROM events.update_slot_distributed
     WHERE slot = ?
     ";
     client

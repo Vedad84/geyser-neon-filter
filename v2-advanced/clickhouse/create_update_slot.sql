@@ -3,7 +3,7 @@ CREATE DATABASE IF NOT EXISTS events ON CLUSTER 'events';
 CREATE TABLE IF NOT EXISTS events.update_slot_local ON CLUSTER '{cluster}' (
     slot UInt64 CODEC(DoubleDelta, ZSTD),
     parent Nullable(UInt64) default 0 CODEC(DoubleDelta, ZSTD),
-    slot_status Enum('Processed' = 1, 'Rooted' = 2, 'Confirmed' = 3) CODEC(Gorilla, ZSTD),
+    slot_status Enum('Processed' = 1, 'Rooted' = 2, 'Confirmed' = 3) CODEC(DoubleDelta, ZSTD),
     retrieved_time DateTime64 CODEC(DoubleDelta, ZSTD)
 ) ENGINE = ReplicatedMergeTree(
     '/clickhouse/tables/{shard}/update_slot_local',
@@ -28,7 +28,7 @@ kafka_num_consumers = 1,
 kafka_format = 'JSONEachRow';
 
 -- ENGINE Should be ReplicatedSummingMergeTree?
-CREATE MATERIALIZED VIEW IF NOT EXISTS events.update_slot_queue_mv ON CLUSTER '{cluster}' to events.update_slot_local AS
+CREATE MATERIALIZED VIEW IF NOT EXISTS events.update_slot_queue_mv ON CLUSTER '{cluster}' to events.update_slot_distributed AS
 SELECT slot,
     parent,
     slot_status,

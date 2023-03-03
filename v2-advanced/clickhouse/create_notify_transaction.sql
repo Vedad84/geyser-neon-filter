@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS events.notify_transaction_queue ON CLUSTER '{cluster}
     kafka_num_consumers = 1,
     kafka_format = 'JSONAsString';
 
-CREATE MATERIALIZED VIEW IF NOT EXISTS events.notify_transaction_queue_mv ON CLUSTER '{cluster}' TO events.notify_transaction_local AS
+CREATE MATERIALIZED VIEW IF NOT EXISTS events.notify_transaction_queue_mv ON CLUSTER '{cluster}' TO events.notify_transaction_distributed AS
 SELECT JSONExtract(notify_transaction_json, 'slot', 'UInt64') AS slot,
        JSONExtract(notify_transaction_json, 'signature', 'Array(Nullable(UInt8))') AS signature,
        notify_transaction_json,

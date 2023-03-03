@@ -5,6 +5,6 @@
     <macros>
         <cluster>events</cluster>
         <shard>01</shard>
-        <replica>01</replica>
+        <replica>clickhouse01</replica>
     </macros>
 </clickhouse>

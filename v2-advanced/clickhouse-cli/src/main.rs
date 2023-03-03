@@ -37,7 +37,7 @@ async fn run_interactive(client: &Client) {
                         Ok(block_info) => serde_json::to_string_pretty(&block_info)
                             .expect("fetch_block_info to_string_pretty is failed"),
                         Err(e) => panic!(
-                            "Failed to execute get_block_info with data {}, error: {e}",
+                            "Failed to execute get_block_info with data: {}, error: {e}",
                             soh
                         ),
                     };
@@ -70,7 +70,7 @@ async fn run_interactive(client: &Client) {
                         Ok(block_info) => serde_json::to_string_pretty(&block_info)
                             .expect("get_transaction_info to_string_pretty is failed"),
                         Err(e) => panic!(
-                            "Failed to execute get_update_account with data {}, error: {e}",
+                            "Failed to execute get_update_account with data: {}, error: {e}",
                             vop
                         ),
                     };
@@ -88,7 +88,7 @@ async fn run_interactive(client: &Client) {
                         Ok(block_info) => serde_json::to_string_pretty(&block_info)
                             .expect("get_update_slot to_string_pretty is failed"),
                         Err(e) => panic!(
-                            "Failed to execute get_update_slot with slot {:?} error: {e}",
+                            "Failed to execute get_update_slot with slot: {:?}, error: {e}",
                             slot
                         ),
                     };
@@ -106,7 +106,7 @@ async fn run_interactive(client: &Client) {
                         Ok(block_info) => serde_json::to_string_pretty(&block_info)
                             .expect("get_info_for_table to_string_pretty is failed"),
                         Err(e) => panic!(
-                            "Failed to execute get_info_for_table with table_name {} error: {e}",
+                            "Failed to execute get_info_for_table with table_name: {}, error: {e}",
                             table_name
                         ),
                     };
@@ -124,7 +124,7 @@ async fn run_interactive(client: &Client) {
                         Ok(block_info) => serde_json::to_string_pretty(&block_info)
                             .expect("get_table_row_count to_string_pretty is failed"),
                         Err(e) => panic!(
-                            "Failed to execute get_table_row_count with table_name {} error: {e}",
+                            "Failed to execute get_table_row_count with table_name: {}, error: {e}",
                             table_name
                         ),
                     };

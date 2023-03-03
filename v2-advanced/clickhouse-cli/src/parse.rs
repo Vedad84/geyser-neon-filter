@@ -177,6 +177,7 @@ impl FromStr for VersionOrPubkey {
 
     fn from_str(s: &str) -> Result<Self, ParseError> {
         let write_version = s.parse::<u64>().map_err(|_| ParseError);
+
         let mut pubkey: Result<Vec<u8>, _> = s[1..s.len() - 1]
             .split(',')
             .map(|s| s.parse::<u8>().map_err(|_| ParseError))

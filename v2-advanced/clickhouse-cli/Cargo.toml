@@ -6,15 +6,16 @@ description = "Clickhouse command line utility"
 authors = ["NeonLabs Maintainers <maintainers@neonlabs.org>"]
 
 [dependencies]
-tokio = { version = "1.25.0", features = ["full"] }
-clickhouse = "0.11.3"
-clap = "4.1.6"
-inquire = { version = "0.5.3" }
+tokio = { version = "1.26.0", features = ["full"] }
+clickhouse = { version = "0.11.3", features = ["time"] }
+clap = "4.1.8"
+inquire = { version = "0.6.0" }
 serde = { version = "1.0.152", features = ["derive"] }
 serde_json = "1.0.93"
 anyhow = "1.0.69"
 bs58 = "0.4.0"
 serde_repr = "0.1.10"
+time = { version = "0.3.20", features = ["serde","serde-well-known"] }
 
 [dev-dependencies]
 clickhouse = { version = "0.11.3", features = ["test-util"] }

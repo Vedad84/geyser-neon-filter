@@ -4,13 +4,13 @@ CREATE TABLE IF NOT EXISTS events.update_account_local ON CLUSTER '{cluster}' (
     pubkey Array(UInt8) CODEC(ZSTD),
     lamports UInt64 CODEC(DoubleDelta, ZSTD),
     owner Array(UInt8) CODEC(ZSTD),
-    executable Bool CODEC(Gorilla),
+    executable Bool CODEC(DoubleDelta),
     rent_epoch UInt64 CODEC(DoubleDelta, ZSTD),
     data Array(UInt8) CODEC(ZSTD),
-    write_version UInt64 CODEC(Gorilla, ZSTD),
+    write_version UInt64 CODEC(DoubleDelta, ZSTD),
     txn_signature Array(Nullable(UInt8)) CODEC(ZSTD),
     slot UInt64 CODEC(DoubleDelta),
-    is_startup Bool CODEC(Gorilla),
+    is_startup Bool CODEC(DoubleDelta),
     retrieved_time DateTime64 CODEC(DoubleDelta, ZSTD)
 ) ENGINE = ReplicatedMergeTree(
     '/clickhouse/tables/{shard}/update_account_local',
@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS events.update_account_queue ON CLUSTER '{cluster}' (
     kafka_num_consumers = 1,
     kafka_format = 'JSONEachRow';
 
-CREATE MATERIALIZED VIEW IF NOT EXISTS events.update_account_queue_mv ON CLUSTER '{cluster}' to events.update_account_local
+CREATE MATERIALIZED VIEW IF NOT EXISTS events.update_account_queue_mv ON CLUSTER '{cluster}' to events.update_account_distributed
 AS  SELECT pubkey,
            lamports,
            owner,
