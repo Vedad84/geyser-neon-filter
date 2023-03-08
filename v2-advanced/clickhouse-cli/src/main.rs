@@ -6,6 +6,7 @@ use core::panic;
 use clap::{Arg, Command};
 use clickhouse::{error::Result, Client};
 
+use db::fetch_function_list;
 use inquire::CustomType;
 use inquire::Select;
 use parse::{SlotOrHash, SlotOrSignature, VersionOrPubkey};
@@ -24,6 +25,7 @@ async fn run_interactive(client: &Client) {
         "get_update_slot",
         "get_info_for_table",
         "get_table_row_count",
+        "show_function_list",
     ];
     if let Ok(choice) = Select::new("Choose the command", options).prompt() {
         match choice {
@@ -129,6 +131,16 @@ async fn run_interactive(client: &Client) {
                         ),
                     };
                     println!("{prettified_json}");
+                }
+            }
+
+            "show_function_list" => {
+                let function_list = match fetch_function_list(client).await {
+                    Ok(function_list) => function_list,
+                    Err(e) => panic!("Failed to execute show_function_list, error: {e}"),
+                };
+                for s in function_list {
+                    println!("{}", s);
                 }
             }
 
