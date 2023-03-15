@@ -12,6 +12,8 @@ use std::sync::{
     atomic::{AtomicU64, Ordering},
     Arc,
 };
+use tokio::select;
+use tokio::signal::unix::{signal, SignalKind};
 use tokio::sync::RwLock;
 
 use crate::{
@@ -145,16 +147,23 @@ pub async fn consumer<T, S>(
         panic!("Couldn't subscribe to specified topic with {type_name}, error: {e}")
     });
 
-    info!("The consumer loop for {type_name} is about to start!");
+    let mut shutdown_stream = signal(SignalKind::terminate()).unwrap();
+
+    info!("The consumer loop for {type_name} is about to start: {:?}", consumer.position().unwrap());
 
     loop {
-        match consumer.recv().await {
+        let msg_result: Result<_, _> = select! {
+            _ = shutdown_stream.recv() => break,
+            msg_result = consumer.recv() => msg_result,
+        };
+
+        match msg_result {
             Ok(message) => {
                 process_message(
-                    filter_config.clone(),
+                    Arc::clone(&filter_config),
                     message,
                     filter_tx.clone(),
-                    stats.clone(),
+                    Arc::clone(&stats),
                 )
                 .await;
             }
@@ -162,6 +171,6 @@ pub async fn consumer<T, S>(
                 stats.kafka_errors_consumer.inc();
                 error!("Kafka consumer error: {}", e);
             }
-        };
+        }
     }
 }

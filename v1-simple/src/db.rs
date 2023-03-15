@@ -1,3 +1,4 @@
+use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -13,6 +14,8 @@ use flume::Sender;
 use kafka_common::kafka_structs::UpdateSlotStatus;
 use log::error;
 use log::info;
+use tokio::select;
+use tokio::signal::unix::{signal, SignalKind};
 use tokio_postgres::NoTls;
 
 use crate::app_config::AppConfig;
@@ -76,7 +79,7 @@ pub async fn create_db_pool(config: Arc<AppConfig>) -> Result<Arc<Pool>> {
     Ok(Arc::new(pool))
 }
 
-async fn exec_account_statement(
+pub async fn exec_account_statement(
     client: Arc<Client>,
     stats: Arc<Stats>,
     account_tx: Sender<DbAccountInfo>,
@@ -107,7 +110,7 @@ async fn exec_account_statement(
     account_rx.len()
 }
 
-async fn exec_transaction_statement(
+pub async fn exec_transaction_statement(
     client: Arc<Client>,
     stats: Arc<Stats>,
     transaction_tx: Sender<DbTransaction>,
@@ -141,7 +144,7 @@ async fn exec_transaction_statement(
     transaction_rx.len()
 }
 
-async fn exec_block_statement(
+pub async fn exec_block_statement(
     client: Arc<Client>,
     stats: Arc<Stats>,
     block_tx: Sender<DbBlockInfo>,
@@ -172,7 +175,7 @@ async fn exec_block_statement(
     block_rx.len()
 }
 
-async fn exec_slot_statement(
+pub async fn exec_slot_statement(
     client: Arc<Client>,
     stats: Arc<Stats>,
     slot_tx: Sender<UpdateSlotStatus>,
@@ -208,88 +211,30 @@ async fn exec_slot_statement(
     slot_rx.len()
 }
 
-pub async fn db_stmt_executor(
+pub async fn db_stmt_executor<M, F>(
     db_pool: Arc<Pool>,
     stats: Arc<Stats>,
-    account_queue: (Sender<DbAccountInfo>, Receiver<DbAccountInfo>),
-    slot_queue: (Sender<UpdateSlotStatus>, Receiver<UpdateSlotStatus>),
-    transaction_queue: (Sender<DbTransaction>, Receiver<DbTransaction>),
-    block_queue: (Sender<DbBlockInfo>, Receiver<DbBlockInfo>),
-) {
-    let mut idle_interval = tokio::time::interval(Duration::from_millis(500));
-
-    let (account_tx, account_rx) = account_queue;
-    let (slot_tx, slot_rx) = slot_queue;
-    let (transaction_tx, transaction_rx) = transaction_queue;
-    let (block_tx, block_rx) = block_queue;
+    queue_tx: Sender<M>,
+    queue_rx: Receiver<M>,
+    process_message: impl Fn(Arc<Client>, Arc<Stats>, Sender<M>, Receiver<M>) -> F,
+) where
+    F: Future<Output=()> + Send + 'static,
+{
+    let mut idle_interval = tokio::time::interval(Duration::from_millis(100));
+    let mut shutdown_stream = signal(SignalKind::terminate()).unwrap();
 
     loop {
-        if let Ok(client) = db_pool.get().await {
-            let client = Arc::new(client);
-
-            if account_tx.is_empty()
-                && slot_tx.is_empty()
-                && transaction_tx.is_empty()
-                && block_tx.is_empty()
-            {
+        let db_pool_result: Result<_, _> = select! {
+            _ = shutdown_stream.recv() => break,
+            db_pool_result = db_pool.get() => db_pool_result,
+        };
+        if let Ok(client) = db_pool_result {
+            if queue_rx.is_empty() {
                 idle_interval.tick().await;
-            }
-
-            if !account_rx.is_empty() {
-                let client = client.clone();
-                let stats = stats.clone();
-                let account_tx = account_tx.clone();
-                let account_rx = account_rx.clone();
-
-                tokio::spawn(async move {
-                    let channel_len =
-                        exec_account_statement(client, stats.clone(), account_tx, account_rx).await;
-                    stats.queue_len_update_account.set(channel_len as f64);
-                });
-            }
-
-            if !slot_rx.is_empty() {
-                let client = client.clone();
-                let stats = stats.clone();
-                let slot_tx = slot_tx.clone();
-                let slot_rx = slot_rx.clone();
-
-                tokio::spawn(async move {
-                    let channel_len =
-                        exec_slot_statement(client, stats.clone(), slot_tx, slot_rx).await;
-                    stats.queue_len_update_slot.set(channel_len as f64);
-                });
-            }
-
-            if !transaction_rx.is_empty() {
-                let client = client.clone();
-                let stats = stats.clone();
-                let transaction_tx = transaction_tx.clone();
-                let transaction_rx = transaction_rx.clone();
-
-                tokio::spawn(async move {
-                    let channel_len = exec_transaction_statement(
-                        client,
-                        stats.clone(),
-                        transaction_tx,
-                        transaction_rx,
-                    )
-                    .await;
-                    stats.queue_len_notify_transaction.set(channel_len as f64);
-                });
-            }
-
-            if !block_rx.is_empty() {
-                let client = client.clone();
-                let stats = stats.clone();
-                let block_tx = block_tx.clone();
-                let block_rx = block_rx.clone();
-
-                tokio::spawn(async move {
-                    let channel_len =
-                        exec_block_statement(client, stats.clone(), block_tx, block_rx).await;
-                    stats.queue_len_notify_block.set(channel_len as f64);
-                });
+            } else {
+                tokio::spawn(
+                    process_message(Arc::new(client), Arc::clone(&stats), queue_tx.clone(), queue_rx.clone())
+                );
             }
         } else {
             error!("Failed to get a client from the pool");

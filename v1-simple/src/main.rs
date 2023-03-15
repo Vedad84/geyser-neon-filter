@@ -23,7 +23,13 @@ use crate::{
 };
 use app_config::{env_build_config, AppConfig};
 use clap::{Arg, Command};
-use db::db_stmt_executor;
+use crate::db::{
+    db_stmt_executor,
+    exec_account_statement,
+    exec_block_statement,
+    exec_slot_statement,
+    exec_transaction_statement,
+};
 use fast_log::{
     consts::LogSize,
     plugin::{file_split::RollingType, packer::LogPacker},
@@ -138,13 +144,56 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
         ctx_stats.clone(),
     ));
 
-    let db_stmt_executor = tokio::spawn(db_stmt_executor(
-        db_pool,
-        ctx_stats.stats.clone(),
-        (account_tx.clone(), account_rx.clone()),
-        (slot_tx.clone(), slot_rx.clone()),
-        (transaction_tx.clone(), transaction_rx.clone()),
-        (block_tx.clone(), block_rx.clone()),
+    let account_db_stmt_executor = tokio::spawn(db_stmt_executor(
+        Arc::clone(&db_pool),
+        Arc::clone(&ctx_stats.stats),
+        account_tx,
+        account_rx,
+        move |client, stats, queue_tx, queue_rx| {
+            async move {
+                let channel_len = exec_account_statement(client, Arc::clone(&stats), queue_tx, queue_rx).await;
+                stats.queue_len_update_account.set(channel_len as f64);
+            }
+        }
+    ));
+
+    let slot_db_stmt_executor = tokio::spawn(db_stmt_executor(
+        Arc::clone(&db_pool),
+        Arc::clone(&ctx_stats.stats),
+        slot_tx,
+        slot_rx,
+        move |client, stats, queue_tx, queue_rx| {
+            async move {
+                let channel_len = exec_slot_statement(client, Arc::clone(&stats), queue_tx, queue_rx).await;
+                stats.queue_len_update_slot.set(channel_len as f64);
+            }
+        }
+    ));
+
+    let transaction_db_stmt_executor = tokio::spawn(db_stmt_executor(
+        Arc::clone(&db_pool),
+        Arc::clone(&ctx_stats.stats),
+        transaction_tx,
+        transaction_rx,
+        move |client, stats, queue_tx, queue_rx| {
+            async move {
+                let channel_len = exec_transaction_statement(client, Arc::clone(&stats), queue_tx, queue_rx).await;
+                stats.queue_len_notify_transaction.set(channel_len as f64);
+            }
+        }
+    ));
+
+    let block_db_stmt_executor = tokio::spawn(db_stmt_executor(
+        Arc::clone(&db_pool),
+        Arc::clone(&ctx_stats.stats),
+        block_tx,
+        block_rx,
+        move |client, stats, queue_tx, queue_rx| {
+            async move {
+                let channel_len = exec_block_statement(client, stats.clone(), queue_tx, queue_rx).await;
+                stats.queue_len_notify_block.set(channel_len as f64);
+            }
+        }
     ));
 
     let _ = tokio::join!(
@@ -152,9 +201,12 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
         consumer_update_slot,
         consumer_transaction,
         consumer_notify_block,
-        db_stmt_executor,
+        account_db_stmt_executor,
+        slot_db_stmt_executor,
+        transaction_db_stmt_executor,
+        block_db_stmt_executor,
         prometheus,
-        cfg_watcher
+        cfg_watcher,
     );
 }
 
