@@ -36,7 +36,7 @@ pub fn extract_from_message<'a>(message: &'a BorrowedMessage<'a>) -> Option<&'a 
 }
 
 pub fn get_counters(
-    stats: &Arc<Stats>,
+    stats: &Stats,
     message_type: MessageType,
 ) -> (&Counter<u64, AtomicU64>, &Gauge<f64, AtomicU64>) {
     match message_type {
@@ -70,8 +70,8 @@ async fn process_event<'a>(
 pub async fn process_message<T, S>(
     filter_config: Arc<RwLock<FilterConfig>>,
     message: BorrowedMessage<'_>,
-    filter_tx: Sender<S>,
-    stats: Arc<Stats>,
+    filter_tx: &Sender<S>,
+    stats: &Stats,
 ) where
     T: for<'a> Deserialize<'a> + Send + 'static + GetMessageType + GetEvent,
     S: From<T> + Send + 'static,
@@ -93,7 +93,7 @@ pub async fn process_message<T, S>(
                     return;
                 }
 
-                let (received, queue_len) = get_counters(&stats, event.get_type());
+                let (received, queue_len) = get_counters(stats, event.get_type());
                 queue_len.set(filter_tx.len() as f64);
                 received.inc();
 
@@ -162,8 +162,8 @@ pub async fn consumer<T, S>(
                 process_message(
                     Arc::clone(&filter_config),
                     message,
-                    filter_tx.clone(),
-                    Arc::clone(&stats),
+                    &filter_tx,
+                    &stats,
                 )
                 .await;
             }

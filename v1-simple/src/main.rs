@@ -149,9 +149,9 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
         Arc::clone(&ctx_stats.stats),
         account_tx,
         account_rx,
-        move |client, stats, queue_tx, queue_rx| {
+        move |client, stats, account_tx, account_rx| {
             async move {
-                let channel_len = exec_account_statement(client, Arc::clone(&stats), queue_tx, queue_rx).await;
+                let channel_len = exec_account_statement(client, Arc::clone(&stats), account_tx, account_rx).await;
                 stats.queue_len_update_account.set(channel_len as f64);
             }
         }
@@ -162,9 +162,9 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
         Arc::clone(&ctx_stats.stats),
         slot_tx,
         slot_rx,
-        move |client, stats, queue_tx, queue_rx| {
+        move |client, stats, slot_tx, slot_rx| {
             async move {
-                let channel_len = exec_slot_statement(client, Arc::clone(&stats), queue_tx, queue_rx).await;
+                let channel_len = exec_slot_statement(client, Arc::clone(&stats), slot_tx, slot_rx).await;
                 stats.queue_len_update_slot.set(channel_len as f64);
             }
         }
@@ -175,9 +175,9 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
         Arc::clone(&ctx_stats.stats),
         transaction_tx,
         transaction_rx,
-        move |client, stats, queue_tx, queue_rx| {
+        move |client, stats, transaction_tx, transaction_rx| {
             async move {
-                let channel_len = exec_transaction_statement(client, Arc::clone(&stats), queue_tx, queue_rx).await;
+                let channel_len = exec_transaction_statement(client, Arc::clone(&stats), transaction_tx, transaction_rx).await;
                 stats.queue_len_notify_transaction.set(channel_len as f64);
             }
         }
@@ -188,9 +188,9 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
         Arc::clone(&ctx_stats.stats),
         block_tx,
         block_rx,
-        move |client, stats, queue_tx, queue_rx| {
+        move |client, stats, block_tx, block_rx| {
             async move {
-                let channel_len = exec_block_statement(client, stats.clone(), queue_tx, queue_rx).await;
+                let channel_len = exec_block_statement(client, stats.clone(), block_tx, block_rx).await;
                 stats.queue_len_notify_block.set(channel_len as f64);
             }
         }
