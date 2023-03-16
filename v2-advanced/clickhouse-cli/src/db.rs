@@ -242,3 +242,13 @@ pub async fn fetch_row_count(client: &Client, table_name: &str) -> Result<TableR
         .await
         .map_err(anyhow::Error::msg)
 }
+
+pub async fn fetch_function_list(client: &Client) -> Result<Vec<String>> {
+    let query = "SELECT name, create_query FROM system.functions
+    WHERE origin = 'SQLUserDefined'";
+    client
+        .query(query)
+        .fetch_all::<String>()
+        .await
+        .map_err(anyhow::Error::msg)
+}
