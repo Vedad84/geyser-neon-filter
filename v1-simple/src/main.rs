@@ -15,7 +15,7 @@ use std::sync::Arc;
 
 use crate::{
     build_info::get_build_info,
-    consumer::consumer,
+    consumer::run_consumer,
     consumer_stats::ContextWithStats,
     db::create_db_pool,
     db_types::{DbAccountInfo, DbBlockInfo, DbTransaction},
@@ -23,13 +23,7 @@ use crate::{
 };
 use app_config::{env_build_config, AppConfig};
 use clap::{Arg, Command};
-use crate::db::{
-    db_stmt_executor,
-    exec_account_statement,
-    exec_block_statement,
-    exec_slot_statement,
-    exec_transaction_statement,
-};
+use crate::db::{db_stmt_executor, exec_account_statement, exec_block_statement, exec_slot_statement, exec_transaction_statement};
 use fast_log::{
     consts::LogSize,
     plugin::{file_split::RollingType, packer::LogPacker},
@@ -42,6 +36,7 @@ use kafka_common::kafka_structs::{
 use log::info;
 use prometheus::start_prometheus;
 use tokio::{fs, sync::RwLock};
+use crate::consumer::{new_consumer, QueueMsg};
 
 async fn run(mut config: AppConfig, filter_config: FilterConfig) {
     let logger: &'static Logger = fast_log::init(fast_log::Config::new().console().file_split(
@@ -105,102 +100,114 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
         .await
         .unwrap_or_else(|e| panic!("Failed to create db pool, error: {e}"));
 
-    let (account_tx, account_rx) = flume::bounded::<DbAccountInfo>(account_capacity);
-    let (slot_tx, slot_rx) = flume::bounded::<UpdateSlotStatus>(slot_capacity);
-    let (transaction_tx, transaction_rx) = flume::bounded::<DbTransaction>(transaction_capacity);
-    let (block_tx, block_rx) = flume::bounded::<DbBlockInfo>(block_capacity);
+    let (account_tx, account_rx) = flume::bounded::<QueueMsg<DbAccountInfo>>(account_capacity);
+    let (slot_tx, slot_rx) = flume::bounded::<QueueMsg<UpdateSlotStatus>>(slot_capacity);
+    let (transaction_tx, transaction_rx) = flume::bounded::<QueueMsg<DbTransaction>>(transaction_capacity);
+    let (block_tx, block_rx) = flume::bounded::<QueueMsg<DbBlockInfo>>(block_capacity);
 
     let cfg_watcher = tokio::spawn(async_watch(config.clone(), filter_config.clone()));
 
-    let consumer_update_account = tokio::spawn(consumer::<UpdateAccount, DbAccountInfo>(
-        config.clone(),
+    let consumer_update_account = new_consumer(
+        &config,
+        &update_account_topic,
+        ctx_stats.clone(),
+    );
+
+    let consumer_update_account_handle = tokio::spawn(run_consumer::<UpdateAccount, DbAccountInfo>(
+        Arc::clone(&consumer_update_account),
         filter_config.clone(),
-        update_account_topic,
+        update_account_topic.clone(),
         account_tx.clone(),
         ctx_stats.clone(),
     ));
 
-    let consumer_update_slot = tokio::spawn(consumer(
-        config.clone(),
+    let consumer_update_slot = new_consumer(
+        &config,
+        &update_slot_topic,
+        ctx_stats.clone(),
+    );
+
+    let consumer_update_slot_handle = tokio::spawn(run_consumer(
+        Arc::clone(&consumer_update_slot),
         filter_config.clone(),
-        update_slot_topic,
+        update_slot_topic.clone(),
         slot_tx.clone(),
         ctx_stats.clone(),
     ));
 
-    let consumer_transaction = tokio::spawn(consumer::<NotifyTransaction, DbTransaction>(
-        config.clone(),
+    let consumer_transaction = new_consumer(
+        &config,
+        &notify_transaction_topic,
+        ctx_stats.clone(),
+    );
+
+    let consumer_transaction_handle = tokio::spawn(run_consumer::<NotifyTransaction, DbTransaction>(
+        Arc::clone(&consumer_transaction),
         filter_config.clone(),
-        notify_transaction_topic,
+        notify_transaction_topic.clone(),
         transaction_tx.clone(),
         ctx_stats.clone(),
     ));
 
-    let consumer_notify_block = tokio::spawn(consumer::<NotifyBlockMetaData, DbBlockInfo>(
-        config.clone(),
+    let consumer_notify_block = new_consumer(
+        &config,
+        &notify_block_topic,
+        ctx_stats.clone(),
+    );
+
+    let consumer_notify_block_handle = tokio::spawn(run_consumer::<NotifyBlockMetaData, DbBlockInfo>(
+        Arc::clone(&consumer_notify_block),
         filter_config.clone(),
-        notify_block_topic,
+        notify_block_topic.clone(),
         block_tx.clone(),
         ctx_stats.clone(),
     ));
 
     let account_db_stmt_executor = tokio::spawn(db_stmt_executor(
+        Arc::clone(&consumer_update_account),
+        update_account_topic.clone(),
         Arc::clone(&db_pool),
         Arc::clone(&ctx_stats.stats),
-        account_tx,
-        account_rx,
-        move |client, stats, account_tx, account_rx| {
-            async move {
-                let channel_len = exec_account_statement(client, Arc::clone(&stats), account_tx, account_rx).await;
-                stats.queue_len_update_account.set(channel_len as f64);
-            }
-        }
+        (account_tx, account_rx),
+        ctx_stats.stats.queue_len_update_account.clone(),
+        exec_account_statement,
     ));
 
     let slot_db_stmt_executor = tokio::spawn(db_stmt_executor(
+        Arc::clone(&consumer_update_slot),
+        update_slot_topic.clone(),
         Arc::clone(&db_pool),
         Arc::clone(&ctx_stats.stats),
-        slot_tx,
-        slot_rx,
-        move |client, stats, slot_tx, slot_rx| {
-            async move {
-                let channel_len = exec_slot_statement(client, Arc::clone(&stats), slot_tx, slot_rx).await;
-                stats.queue_len_update_slot.set(channel_len as f64);
-            }
-        }
+        (slot_tx, slot_rx),
+        ctx_stats.stats.queue_len_update_slot.clone(),
+        exec_slot_statement,
     ));
 
     let transaction_db_stmt_executor = tokio::spawn(db_stmt_executor(
+        Arc::clone(&consumer_transaction),
+        notify_transaction_topic.clone(),
         Arc::clone(&db_pool),
         Arc::clone(&ctx_stats.stats),
-        transaction_tx,
-        transaction_rx,
-        move |client, stats, transaction_tx, transaction_rx| {
-            async move {
-                let channel_len = exec_transaction_statement(client, Arc::clone(&stats), transaction_tx, transaction_rx).await;
-                stats.queue_len_notify_transaction.set(channel_len as f64);
-            }
-        }
+        (transaction_tx, transaction_rx),
+        ctx_stats.stats.queue_len_notify_transaction.clone(),
+        exec_transaction_statement,
     ));
 
     let block_db_stmt_executor = tokio::spawn(db_stmt_executor(
+        Arc::clone(&consumer_notify_block),
+        notify_block_topic.clone(),
         Arc::clone(&db_pool),
         Arc::clone(&ctx_stats.stats),
-        block_tx,
-        block_rx,
-        move |client, stats, block_tx, block_rx| {
-            async move {
-                let channel_len = exec_block_statement(client, stats.clone(), block_tx, block_rx).await;
-                stats.queue_len_notify_block.set(channel_len as f64);
-            }
-        }
+        (block_tx, block_rx),
+        ctx_stats.stats.queue_len_notify_block.clone(),
+        exec_block_statement,
     ));
 
     let _ = tokio::join!(
-        consumer_update_account,
-        consumer_update_slot,
-        consumer_transaction,
-        consumer_notify_block,
+        consumer_update_account_handle,
+        consumer_update_slot_handle,
+        consumer_transaction_handle,
+        consumer_notify_block_handle,
         account_db_stmt_executor,
         slot_db_stmt_executor,
         transaction_db_stmt_executor,

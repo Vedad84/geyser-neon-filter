@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use anyhow::anyhow;
 use anyhow::Result;
 use chrono::Utc;
@@ -10,7 +11,7 @@ use crate::db_types::DbBlockInfo;
 use crate::db_types::DbTransaction;
 
 pub async fn insert_into_account_audit(
-    account: &DbAccountInfo,
+    account: Arc<DbAccountInfo>,
     statement: &Statement,
     client: &Client,
 ) -> Result<u64> {
@@ -35,7 +36,7 @@ pub async fn insert_into_account_audit(
 }
 
 pub async fn insert_into_transaction(
-    transaction: &DbTransaction,
+    transaction: Arc<DbTransaction>,
     statement: &Statement,
     client: &Client,
 ) -> Result<u64> {
@@ -61,7 +62,7 @@ pub async fn insert_into_transaction(
 }
 
 pub async fn insert_into_block_metadata(
-    block_info: &DbBlockInfo,
+    block_info: Arc<DbBlockInfo>,
     statement: &Statement,
     client: &Client,
 ) -> Result<u64> {
@@ -82,7 +83,7 @@ pub async fn insert_into_block_metadata(
 }
 
 pub async fn insert_slot_status_internal(
-    update_slot: &UpdateSlotStatus,
+    update_slot: Arc<UpdateSlotStatus>,
     statement: &Statement,
     client: &Client,
 ) -> Result<u64> {

@@ -1,5 +1,6 @@
 use std::future::Future;
 use std::sync::Arc;
+use std::sync::atomic::AtomicU64;
 use std::time::Duration;
 
 use anyhow::Result;
@@ -14,12 +15,15 @@ use flume::Sender;
 use kafka_common::kafka_structs::UpdateSlotStatus;
 use log::error;
 use log::info;
+use prometheus_client::metrics::gauge::Gauge;
+use rdkafka::consumer::{Consumer, StreamConsumer};
 use tokio::select;
 use tokio::signal::unix::{signal, SignalKind};
 use tokio_postgres::NoTls;
 
 use crate::app_config::AppConfig;
-use crate::consumer_stats::Stats;
+use crate::consumer::QueueMsg;
+use crate::consumer_stats::{ContextWithStats, Stats};
 
 use crate::db_inserts::insert_into_account_audit;
 use crate::db_inserts::insert_into_block_metadata;
@@ -80,164 +84,119 @@ pub async fn create_db_pool(config: Arc<AppConfig>) -> Result<Arc<Pool>> {
 }
 
 pub async fn exec_account_statement(
-    client: Arc<Client>,
-    stats: Arc<Stats>,
-    account_tx: Sender<DbAccountInfo>,
-    account_rx: Receiver<DbAccountInfo>,
-) -> usize {
-    if let Ok(db_account_info) = account_rx.recv_async().await {
-        let statement = match create_account_insert_statement(&client).await {
-            Ok(s) => s,
-            Err(e) => {
-                error!("Failed to execute create_account_insert_statement, error {e}");
-                stats.db_errors.inc();
-                if let Err(e) = account_tx.send_async(db_account_info).await {
-                    error!("Failed to push account_info back to the database queue, error: {e}");
-                }
-                return account_rx.len();
-            }
-        };
-
-        if let Err(error) = insert_into_account_audit(&db_account_info, &statement, &client).await {
-            error!("Failed to insert the data to account_audit, error: {error}");
-            stats.db_errors.inc();
-            // Push account_info back to the database queue
-            if let Err(e) = account_tx.send_async(db_account_info).await {
-                error!("Failed to push account_info back to the database queue, error: {e}");
-            }
-        }
-    }
-    account_rx.len()
+    client: Client,
+    db_account_info: Arc<DbAccountInfo>,
+) -> Result<u64> {
+    let statement = create_account_insert_statement(&client).await?;
+    insert_into_account_audit(db_account_info, &statement, &client).await
 }
 
 pub async fn exec_transaction_statement(
-    client: Arc<Client>,
-    stats: Arc<Stats>,
-    transaction_tx: Sender<DbTransaction>,
-    transaction_rx: Receiver<DbTransaction>,
-) -> usize {
-    if let Ok(db_transaction_info) = transaction_rx.recv_async().await {
-        let statement = match create_transaction_insert_statement(&client).await {
-            Ok(s) => s,
-            Err(e) => {
-                error!("Failed to execute create_transaction_insert_statement, error {e}");
-                stats.db_errors.inc();
-                if let Err(e) = transaction_tx.send_async(db_transaction_info).await {
-                    error!(
-                        "Failed to push transaction_info back to the database queue, error: {e}"
-                    );
-                }
-                return transaction_rx.len();
-            }
-        };
-
-        if let Err(error) = insert_into_transaction(&db_transaction_info, &statement, &client).await
-        {
-            error!("Failed to insert the data to transaction_audit, error: {error}");
-            stats.db_errors.inc();
-            // Push transaction_info back to the database queue
-            if let Err(e) = transaction_tx.send_async(db_transaction_info).await {
-                error!("Failed to push transaction_info back to the database queue, error: {e}");
-            }
-        }
-    }
-    transaction_rx.len()
+    client: Client,
+    db_transaction_info: Arc<DbTransaction>,
+) -> Result<u64> {
+    let statement = create_transaction_insert_statement(&client).await?;
+    insert_into_transaction(db_transaction_info, &statement, &client).await
 }
 
 pub async fn exec_block_statement(
-    client: Arc<Client>,
-    stats: Arc<Stats>,
-    block_tx: Sender<DbBlockInfo>,
-    block_rx: Receiver<DbBlockInfo>,
-) -> usize {
-    if let Ok(db_block_info) = block_rx.recv_async().await {
-        let statement = match create_block_metadata_insert_statement(&client).await {
-            Ok(s) => s,
-            Err(e) => {
-                error!("Failed to prepare create_block_metadata_insert_statement, error {e}");
-                stats.db_errors.inc();
-                if let Err(e) = block_tx.send_async(db_block_info).await {
-                    error!("Failed to push block_info back to the database queue, error: {e}");
-                }
-                return block_rx.len();
-            }
-        };
-
-        if let Err(error) = insert_into_block_metadata(&db_block_info, &statement, &client).await {
-            error!("Failed to insert the data to block_metadata, error: {error}");
-            stats.db_errors.inc();
-            // Push block_info back to the database queue
-            if let Err(e) = block_tx.send_async(db_block_info).await {
-                error!("Failed to push block_info back to the database queue, error: {e}");
-            }
-        }
-    }
-    block_rx.len()
+    client: Client,
+    db_block_info: Arc<DbBlockInfo>,
+) -> Result<u64> {
+    let statement = create_block_metadata_insert_statement(&client).await?;
+    insert_into_block_metadata(db_block_info, &statement, &client).await
 }
 
 pub async fn exec_slot_statement(
-    client: Arc<Client>,
-    stats: Arc<Stats>,
-    slot_tx: Sender<UpdateSlotStatus>,
-    slot_rx: Receiver<UpdateSlotStatus>,
-) -> usize {
-    if let Ok(db_slot_info) = slot_rx.recv_async().await {
-        let statement = match db_slot_info.parent {
-            Some(_) => create_slot_insert_statement_with_parent(&client).await,
-            None => create_slot_insert_statement_without_parent(&client).await,
-        };
+    client: Client,
+    db_slot_info: Arc<UpdateSlotStatus>,
+) -> Result<u64> {
+    let statement = match db_slot_info.parent {
+        Some(_) => create_slot_insert_statement_with_parent(&client).await,
+        None => create_slot_insert_statement_without_parent(&client).await,
+    }?;
 
-        match statement {
-            Ok(statement) => {
-                if let Err(e) =
-                    insert_slot_status_internal(&db_slot_info, &statement, &client).await
-                {
-                    error!("Failed to execute insert_slot_status_internal, error {e}");
-                    stats.db_errors.inc();
-                    if let Err(e) = slot_tx.send_async(db_slot_info).await {
-                        error!("Failed to send slot info back to the queue, error {e}");
-                    }
-                }
-            }
-            Err(e) => {
-                error!("Failed to prepare create_slot_insert_statement, error {e}");
-                stats.db_errors.inc();
-                if let Err(e) = slot_tx.send_async(db_slot_info).await {
-                    error!("Failed to send slot info back to the queue, error {e}");
-                }
-            }
-        }
-    }
-    slot_rx.len()
+    insert_slot_status_internal(db_slot_info, &statement, &client).await
 }
 
 pub async fn db_stmt_executor<M, F>(
+    consumer: Arc<StreamConsumer<ContextWithStats>>,
+    topic: String,
     db_pool: Arc<Pool>,
     stats: Arc<Stats>,
-    queue_tx: Sender<M>,
-    queue_rx: Receiver<M>,
-    process_message: impl Fn(Arc<Client>, Arc<Stats>, Sender<M>, Receiver<M>) -> F,
+    queue: (Sender<QueueMsg<M>>, Receiver<QueueMsg<M>>),
+    queue_len_gauge: Gauge<f64, AtomicU64>,
+    process_msg_async: impl Fn(Client, Arc<M>) -> F + Send + Copy + 'static,
 ) where
-    F: Future<Output=()> + Send + 'static,
+    M: Send + Sync + 'static,
+    F: Future<Output = Result<u64>> + Send + 'static,
 {
-    let mut idle_interval = tokio::time::interval(Duration::from_millis(100));
+    let mut idle_interval = tokio::time::interval(Duration::from_millis(50));
     let mut shutdown_stream = signal(SignalKind::terminate()).unwrap();
+    let (queue_tx, queue_rx) = queue;
 
     loop {
-        let db_pool_result: Result<_, _> = select! {
-            _ = shutdown_stream.recv() => break,
-            db_pool_result = db_pool.get() => db_pool_result,
+        let (message, offset): QueueMsg<M> = select! {
+            _ = shutdown_stream.recv() => return,
+            recv_result = queue_rx.recv_async() => match recv_result {
+                Ok(item) => item,
+                Err(err) => {
+                    error!("Failed to get message for topic: {topic}, error: {err:?}");
+                    continue;
+                },
+            },
         };
-        if let Ok(client) = db_pool_result {
-            if queue_rx.is_empty() {
-                idle_interval.tick().await;
-            } else {
-                tokio::spawn(
-                    process_message(Arc::new(client), Arc::clone(&stats), queue_tx.clone(), queue_rx.clone())
-                );
+
+        let client = loop {
+            select! {
+                _ = shutdown_stream.recv() => return,
+                db_pool_result = db_pool.get() => match db_pool_result {
+                    Ok(client) => break client,
+                    Err(err) => {
+                        error!("Failed to get a client from the pool, error: {err:?}");
+                        idle_interval.tick().await;
+                    },
+                },
+            };
+        };
+
+        tokio::spawn(
+            process_message(
+                Arc::clone(&consumer),
+                topic.clone(),
+                (Arc::clone(&message), offset),
+                queue_tx.clone(),
+                Arc::clone(&stats),
+                queue_len_gauge.clone(),
+                process_msg_async(client, message),
+            ),
+        );
+    }
+}
+
+async fn process_message<M>(
+    consumer: Arc<StreamConsumer<ContextWithStats>>,
+    topic: String,
+    queue_msg: QueueMsg<M>,
+    queue_tx: Sender<QueueMsg<M>>,
+    stats: Arc<Stats>,
+    queue_len_gauge: Gauge<f64, AtomicU64>,
+    process_msg_future: impl Future<Output = Result<u64>>,
+) {
+    let (message, offset) = queue_msg;
+    match process_msg_future.await {
+        Ok(_) => {
+            consumer.store_offset(&topic, offset.partition, offset.offset)
+                .unwrap_or_else(|err| error!("Failed to update offset for topic `{topic}`. Kafka error: {err}"));
+        },
+        Err(err) => {
+            error!("Failed to execute store value from topic `{topic}` into the DB, error {err}");
+            stats.db_errors.inc();
+            if let Err(e) = queue_tx.send_async((message, offset)).await {
+                error!("Failed to push message from topic `{topic}` back to the database queue, error: {e}");
             }
-        } else {
-            error!("Failed to get a client from the pool");
         }
     }
+
+    queue_len_gauge.set(queue_tx.len() as f64);
 }

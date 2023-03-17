@@ -23,6 +23,14 @@ use crate::{
     filter_config::FilterConfig,
 };
 
+#[derive(Debug)]
+pub struct Offset {
+    pub partition: i32,
+    pub offset: i64,
+}
+
+pub type QueueMsg<M> = (Arc<M>, Offset);
+
 pub fn extract_from_message<'a>(message: &'a BorrowedMessage<'a>) -> Option<&'a str> {
     let payload = match message.payload_view::<str>() {
         None => None,
@@ -70,7 +78,7 @@ async fn process_event<'a>(
 pub async fn process_message<T, S>(
     filter_config: Arc<RwLock<FilterConfig>>,
     message: BorrowedMessage<'_>,
-    filter_tx: &Sender<S>,
+    filter_tx: &Sender<QueueMsg<S>>,
     stats: &Stats,
 ) where
     T: for<'a> Deserialize<'a> + Send + 'static + GetMessageType + GetEvent,
@@ -97,7 +105,8 @@ pub async fn process_message<T, S>(
                 queue_len.set(filter_tx.len() as f64);
                 received.inc();
 
-                if let Err(e) = filter_tx.send_async(Into::<S>::into(event)).await {
+                let offset = Offset { partition: message.partition(), offset: message.offset() };
+                if let Err(e) = filter_tx.send_async((Arc::new(Into::<S>::into(event)), offset)).await {
                     error!("Failed to send the data {type_name}, error {e}");
                 }
             }
@@ -111,29 +120,23 @@ pub async fn process_message<T, S>(
     }
 }
 
-pub async fn consumer<T, S>(
-    config: Arc<AppConfig>,
-    filter_config: Arc<RwLock<FilterConfig>>,
-    topic: String,
-    filter_tx: Sender<S>,
+pub fn new_consumer(
+    config: &AppConfig,
+    topic: &str,
     ctx_stats: ContextWithStats,
-) where
-    T: for<'a> Deserialize<'a> + Send + 'static + GetMessageType + GetEvent,
-    S: From<T> + Send + 'static,
-{
-    let type_name = std::any::type_name::<T>();
-    let stats = ctx_stats.stats.clone();
+) -> Arc<StreamConsumer<ContextWithStats>> {
     let consumer: StreamConsumer<ContextWithStats> = ClientConfig::new()
         .set("group.id", &config.kafka_consumer_group_id)
         .set("bootstrap.servers", &config.bootstrap_servers)
         .set("enable.partition.eof", "false")
         .set("session.timeout.ms", &config.session_timeout_ms)
+        .set("enable.auto.commit", "true")
+        .set("enable.auto.offset.store", "false")
         .set("auto.commit.interval.ms", &config.auto_commit_interval_ms)
         .set("queued.min.messages", &config.queued_min_messages)
         .set("fetch.wait.max.ms", &config.fetch_wait_max_ms)
         .set("fetch.message.max.bytes", &config.fetch_message_max_bytes)
         .set("fetch.min.bytes", &config.fetch_min_bytes)
-        .set("enable.auto.commit", "true")
         .set("security.protocol", &config.security_protocol)
         .set("sasl.mechanism", &config.sasl_mechanism)
         .set("sasl.username", &config.sasl_username)
@@ -143,13 +146,25 @@ pub async fn consumer<T, S>(
         .create_with_context(ctx_stats)
         .expect("Consumer creation failed");
 
-    consumer.subscribe(&[&topic]).unwrap_or_else(|e| {
-        panic!("Couldn't subscribe to specified topic with {type_name}, error: {e}")
+    consumer.subscribe(&[topic]).unwrap_or_else(|e| {
+        panic!("Couldn't subscribe to topic {topic}, error: {e}")
     });
 
-    let mut shutdown_stream = signal(SignalKind::terminate()).unwrap();
+    Arc::new(consumer)
+}
 
-    info!("The consumer loop for {type_name} is about to start: {:?}", consumer.position().unwrap());
+pub async fn run_consumer<T, S>(
+    consumer: Arc<StreamConsumer<ContextWithStats>>,
+    filter_config: Arc<RwLock<FilterConfig>>,
+    topic: String,
+    filter_tx: Sender<QueueMsg<S>>,
+    ctx_stats: ContextWithStats,
+) where
+    T: for<'a> Deserialize<'a> + Send + 'static + GetMessageType + GetEvent,
+    S: From<T> + Send + 'static,
+{
+    let mut shutdown_stream = signal(SignalKind::terminate()).unwrap();
+    info!("The consumer loop for topic `{topic}` is about to start: {:?}", consumer.position().unwrap());
 
     loop {
         let msg_result: Result<_, _> = select! {
@@ -163,12 +178,12 @@ pub async fn consumer<T, S>(
                     Arc::clone(&filter_config),
                     message,
                     &filter_tx,
-                    &stats,
+                    &ctx_stats.stats,
                 )
                 .await;
             }
             Err(e) => {
-                stats.kafka_errors_consumer.inc();
+                ctx_stats.stats.kafka_errors_consumer.inc();
                 error!("Kafka consumer error: {}", e);
             }
         }
