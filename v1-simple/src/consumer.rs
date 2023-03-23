@@ -188,4 +188,6 @@ pub async fn run_consumer<T, S>(
             }
         }
     }
+
+    info!("Consumer for topic: `{topic}` is shut down");
 }

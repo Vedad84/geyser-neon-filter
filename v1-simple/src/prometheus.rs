@@ -11,6 +11,7 @@ use hyper::{
     service::{make_service_fn, service_fn},
     Body, Request, Response, Server,
 };
+use log::info;
 use prometheus_client::{encoding::text::encode, registry::Registry};
 use tokio::signal::unix::{signal, SignalKind};
 
@@ -141,7 +142,7 @@ pub async fn start_prometheus(
 async fn start_metrics_server(metrics_addr: SocketAddr, registry: Registry) {
     let mut shutdown_stream = signal(SignalKind::terminate()).unwrap();
 
-    println!("Starting metrics server on {metrics_addr}");
+    info!("Starting metrics server on {metrics_addr}");
 
     let registry = Arc::new(registry);
     Server::bind(&metrics_addr)
@@ -157,6 +158,8 @@ async fn start_metrics_server(metrics_addr: SocketAddr, registry: Registry) {
         })
         .await
         .expect("Failed to bind hyper server with graceful_shutdown");
+
+    info!("Metrics server is shut down");
 }
 
 fn make_handler(

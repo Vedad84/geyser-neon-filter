@@ -33,7 +33,7 @@ use filter_config::FilterConfig;
 use kafka_common::kafka_structs::{
     NotifyBlockMetaData, NotifyTransaction, UpdateAccount, UpdateSlotStatus,
 };
-use log::info;
+use log::{info, Log};
 use prometheus::start_prometheus;
 use tokio::{fs, sync::RwLock};
 use crate::consumer::{new_consumer, QueueMsg};
@@ -215,6 +215,10 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
         prometheus,
         cfg_watcher,
     );
+
+    info!("Gracefully shut down");
+
+    logger.flush()
 }
 
 #[tokio::main]

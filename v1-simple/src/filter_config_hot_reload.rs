@@ -10,6 +10,8 @@ use std::collections::hash_set::{Difference, Intersection};
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::sync::Arc;
+use tokio::select;
+use tokio::signal::unix::{signal, SignalKind};
 use tokio::sync::mpsc::{channel, Receiver};
 use tokio::sync::RwLock;
 
@@ -96,7 +98,12 @@ pub async fn async_watch(
 
     watcher.watch(config.filter_config_path.as_ref(), RecursiveMode::Recursive)?;
 
-    while let Some(res) = rx.recv().await {
+    let mut shutdown_stream = signal(SignalKind::terminate()).unwrap();
+
+    while let Some(res) = select! {
+        _ = shutdown_stream.recv() => None,
+        recv_result = rx.recv() => recv_result,
+    } {
         match res {
             Ok(event) if event.kind == EventKind::Modify(ModifyKind::Data(DataChange::Any)) => {
                 if let Ok(new_filter_config) =
@@ -129,5 +136,8 @@ pub async fn async_watch(
             Err(e) => error!("Filter config watch error: {e:?}"),
         }
     }
+
+    info!("Config watcher is shut down");
+
     Ok(())
 }

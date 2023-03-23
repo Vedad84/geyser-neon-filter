@@ -137,7 +137,10 @@ pub async fn db_stmt_executor<M, F>(
 
     loop {
         let (message, offset): QueueMsg<M> = select! {
-            _ = shutdown_stream.recv() => return,
+            _ = shutdown_stream.recv() => {
+                info!("DB statements executor for topic: `{topic}` is shut down");
+                return
+            },
             recv_result = queue_rx.recv_async() => match recv_result {
                 Ok(item) => item,
                 Err(err) => {
@@ -149,7 +152,10 @@ pub async fn db_stmt_executor<M, F>(
 
         let client = loop {
             select! {
-                _ = shutdown_stream.recv() => return,
+                _ = shutdown_stream.recv() => {
+                    info!("DB statements executor for topic: `{topic}` is shut down");
+                    return
+                },
                 db_pool_result = db_pool.get() => match db_pool_result {
                     Ok(client) => break client,
                     Err(err) => {
