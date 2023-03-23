@@ -130,35 +130,27 @@ pub async fn db_stmt_executor<M, F>(
     M: Send + Sync + 'static,
     F: Future<Output = Result<u64>> + Send + 'static,
 {
-    let mut shutdown_stream = signal(SignalKind::terminate()).unwrap();
-
     loop {
-        let (message, offset): QueueMsg<M> = select! {
-            _ = shutdown_stream.recv() => {
+        match queue_rx.recv_async().await {
+            Ok(queue_msg) => {
+                queue_len_gauge.set(queue_rx.len() as f64);
+
+                tokio::spawn(
+                    process_message(
+                        Arc::clone(&db_pool),
+                        Arc::clone(&consumer),
+                        topic.clone(),
+                        queue_msg,
+                        Arc::clone(&stats),
+                        process_msg_async,
+                    ),
+                );
+            }
+            Err(_) => {
                 info!("DB statements executor for topic: `{topic}` is shut down");
                 return
-            },
-            recv_result = queue_rx.recv_async() => match recv_result {
-                Ok(item) => item,
-                Err(err) => {
-                    error!("Failed to get message for topic: {topic}, error: {err:?}");
-                    continue;
-                },
-            },
-        };
-
-        queue_len_gauge.set(queue_rx.len() as f64);
-
-        tokio::spawn(
-            process_message(
-                Arc::clone(&db_pool),
-                Arc::clone(&consumer),
-                topic.clone(),
-                (Arc::clone(&message), offset),
-                Arc::clone(&stats),
-                process_msg_async,
-            ),
-        );
+            }
+        }
     }
 }
 
