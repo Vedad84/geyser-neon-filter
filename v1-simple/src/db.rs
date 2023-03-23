@@ -11,7 +11,6 @@ use deadpool_postgres::ManagerConfig;
 use deadpool_postgres::Pool;
 use deadpool_postgres::RecyclingMethod;
 use flume::Receiver;
-use flume::Sender;
 use kafka_common::kafka_structs::UpdateSlotStatus;
 use log::error;
 use log::info;
@@ -84,7 +83,7 @@ pub async fn create_db_pool(config: Arc<AppConfig>) -> Result<Arc<Pool>> {
 }
 
 pub async fn exec_account_statement(
-    client: Client,
+    client: Arc<Client>,
     db_account_info: Arc<DbAccountInfo>,
 ) -> Result<u64> {
     let statement = create_account_insert_statement(&client).await?;
@@ -92,7 +91,7 @@ pub async fn exec_account_statement(
 }
 
 pub async fn exec_transaction_statement(
-    client: Client,
+    client: Arc<Client>,
     db_transaction_info: Arc<DbTransaction>,
 ) -> Result<u64> {
     let statement = create_transaction_insert_statement(&client).await?;
@@ -100,7 +99,7 @@ pub async fn exec_transaction_statement(
 }
 
 pub async fn exec_block_statement(
-    client: Client,
+    client: Arc<Client>,
     db_block_info: Arc<DbBlockInfo>,
 ) -> Result<u64> {
     let statement = create_block_metadata_insert_statement(&client).await?;
@@ -108,7 +107,7 @@ pub async fn exec_block_statement(
 }
 
 pub async fn exec_slot_statement(
-    client: Client,
+    client: Arc<Client>,
     db_slot_info: Arc<UpdateSlotStatus>,
 ) -> Result<u64> {
     let statement = match db_slot_info.parent {
@@ -124,16 +123,14 @@ pub async fn db_stmt_executor<M, F>(
     topic: String,
     db_pool: Arc<Pool>,
     stats: Arc<Stats>,
-    queue: (Sender<QueueMsg<M>>, Receiver<QueueMsg<M>>),
+    queue_rx: Receiver<QueueMsg<M>>,
     queue_len_gauge: Gauge<f64, AtomicU64>,
-    process_msg_async: impl Fn(Client, Arc<M>) -> F + Send + Copy + 'static,
+    process_msg_async: fn (Arc<Client>, Arc<M>) -> F,
 ) where
     M: Send + Sync + 'static,
     F: Future<Output = Result<u64>> + Send + 'static,
 {
-    let mut idle_interval = tokio::time::interval(Duration::from_millis(50));
     let mut shutdown_stream = signal(SignalKind::terminate()).unwrap();
-    let (queue_tx, queue_rx) = queue;
 
     loop {
         let (message, offset): QueueMsg<M> = select! {
@@ -150,59 +147,63 @@ pub async fn db_stmt_executor<M, F>(
             },
         };
 
-        let client = loop {
-            select! {
-                _ = shutdown_stream.recv() => {
-                    info!("DB statements executor for topic: `{topic}` is shut down");
-                    return
-                },
-                db_pool_result = db_pool.get() => match db_pool_result {
-                    Ok(client) => break client,
-                    Err(err) => {
-                        error!("Failed to get a client from the pool, error: {err:?}");
-                        idle_interval.tick().await;
-                    },
-                },
-            };
-        };
+        queue_len_gauge.set(queue_rx.len() as f64);
 
         tokio::spawn(
             process_message(
+                Arc::clone(&db_pool),
                 Arc::clone(&consumer),
                 topic.clone(),
                 (Arc::clone(&message), offset),
-                queue_tx.clone(),
                 Arc::clone(&stats),
-                queue_len_gauge.clone(),
-                process_msg_async(client, message),
+                process_msg_async,
             ),
         );
     }
 }
 
-async fn process_message<M>(
+async fn process_message<M, F>(
+    db_pool: Arc<Pool>,
     consumer: Arc<StreamConsumer<ContextWithStats>>,
     topic: String,
     queue_msg: QueueMsg<M>,
-    queue_tx: Sender<QueueMsg<M>>,
     stats: Arc<Stats>,
-    queue_len_gauge: Gauge<f64, AtomicU64>,
-    process_msg_future: impl Future<Output = Result<u64>>,
-) {
+    process_msg_async: impl Fn(Arc<Client>, Arc<M>) -> F,
+) where
+    F: Future<Output = Result<u64>>,
+{
     let (message, offset) = queue_msg;
-    match process_msg_future.await {
-        Ok(_) => {
-            consumer.store_offset(&topic, offset.partition, offset.offset)
-                .unwrap_or_else(|err| error!("Failed to update offset for topic `{topic}`. Kafka error: {err}"));
-        },
-        Err(err) => {
-            error!("Failed to execute store value from topic `{topic}` into the DB, error {err}");
-            stats.db_errors.inc();
-            if let Err(e) = queue_tx.send_async((message, offset)).await {
-                error!("Failed to push message from topic `{topic}` back to the database queue, error: {e}");
+    let mut shutdown_stream = signal(SignalKind::terminate()).unwrap();
+
+    let client = loop {
+        select! {
+            _ = shutdown_stream.recv() => return,
+            db_pool_result = db_pool.get() => match db_pool_result {
+                Ok(client) => break Arc::new(client),
+                Err(err) => {
+                    error!("Failed to get a client from the pool, error: {err:?}");
+                    tokio::time::sleep(Duration::from_millis(50)).await;
+                },
+            },
+        };
+    };
+
+    loop {
+        let process_msg_future = process_msg_async(Arc::clone(&client), Arc::clone(&message));
+        let result = select! {
+            _ = shutdown_stream.recv() => return,
+            result = process_msg_future => result,
+        };
+        match result {
+            Ok(_) => break,
+            Err(err) => {
+                error!("Failed to execute store value from topic `{topic}` into the DB, error {err}");
+                stats.db_errors.inc();
+                tokio::time::sleep(Duration::from_millis(50)).await;
             }
         }
     }
 
-    queue_len_gauge.set(queue_tx.len() as f64);
+    consumer.store_offset(&topic, offset.partition, offset.offset)
+        .unwrap_or_else(|err| error!("Failed to update offset for topic `{topic}`. Kafka error: {err}"));
 }

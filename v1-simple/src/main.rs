@@ -168,7 +168,7 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
         update_account_topic.clone(),
         Arc::clone(&db_pool),
         Arc::clone(&ctx_stats.stats),
-        (account_tx, account_rx),
+        account_rx,
         ctx_stats.stats.queue_len_update_account.clone(),
         exec_account_statement,
     ));
@@ -178,7 +178,7 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
         update_slot_topic.clone(),
         Arc::clone(&db_pool),
         Arc::clone(&ctx_stats.stats),
-        (slot_tx, slot_rx),
+        slot_rx,
         ctx_stats.stats.queue_len_update_slot.clone(),
         exec_slot_statement,
     ));
@@ -188,7 +188,7 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
         notify_transaction_topic.clone(),
         Arc::clone(&db_pool),
         Arc::clone(&ctx_stats.stats),
-        (transaction_tx, transaction_rx),
+        transaction_rx,
         ctx_stats.stats.queue_len_notify_transaction.clone(),
         exec_transaction_statement,
     ));
@@ -198,7 +198,7 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
         notify_block_topic.clone(),
         Arc::clone(&db_pool),
         Arc::clone(&ctx_stats.stats),
-        (block_tx, block_rx),
+        block_rx,
         ctx_stats.stats.queue_len_notify_block.clone(),
         exec_block_statement,
     ));
