@@ -4,7 +4,7 @@ use deadpool_postgres::Client;
 use tokio_postgres::Statement;
 
 pub async fn create_account_insert_statement(client: &Client) -> Result<Statement> {
-    let stmt = "CALL process_account_update($1, $2, $3, $4, $5, $6, $7, $8, $9)";
+    let stmt = "CALL process_account_update($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)";
 
     let stmt = client.prepare_cached(stmt).await;
 
