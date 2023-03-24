@@ -4,11 +4,7 @@ use deadpool_postgres::Client;
 use tokio_postgres::Statement;
 
 pub async fn create_account_insert_statement(client: &Client) -> Result<Statement> {
-    let stmt = "INSERT INTO account AS acct (pubkey, slot, owner, lamports, executable, rent_epoch, data, write_version, updated_on, txn_signature) \
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) \
-    ON CONFLICT (pubkey) DO UPDATE SET slot=excluded.slot, owner=excluded.owner, lamports=excluded.lamports, executable=excluded.executable, rent_epoch=excluded.rent_epoch, \
-    data=excluded.data, write_version=excluded.write_version, updated_on=excluded.updated_on, txn_signature=excluded.txn_signature  WHERE acct.slot < excluded.slot OR (\
-    acct.slot = excluded.slot AND acct.write_version < excluded.write_version)";
+    let stmt = "CALL process_account_update($1, $2, $3, $4, $5, $6, $7, $8, $9)";
 
     let stmt = client.prepare_cached(stmt).await;
 

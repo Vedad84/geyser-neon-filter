@@ -26,7 +26,6 @@ pub async fn insert_into_account_audit(
                 &account.executable,
                 &account.rent_epoch,
                 &account.data,
-                &account.write_version,
                 &updated_on,
                 &account.txn_signature,
             ],
