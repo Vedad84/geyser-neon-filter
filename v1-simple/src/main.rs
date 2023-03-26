@@ -117,7 +117,7 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
         Arc::clone(&consumer_update_account),
         filter_config.clone(),
         update_account_topic.clone(),
-        account_tx.clone(),
+        account_tx,
         ctx_stats.clone(),
     ));
 
@@ -131,7 +131,7 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
         Arc::clone(&consumer_update_slot),
         filter_config.clone(),
         update_slot_topic.clone(),
-        slot_tx.clone(),
+        slot_tx,
         ctx_stats.clone(),
     ));
 
@@ -145,7 +145,7 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
         Arc::clone(&consumer_transaction),
         filter_config.clone(),
         notify_transaction_topic.clone(),
-        transaction_tx.clone(),
+        transaction_tx,
         ctx_stats.clone(),
     ));
 
@@ -159,7 +159,7 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
         Arc::clone(&consumer_notify_block),
         filter_config.clone(),
         notify_block_topic.clone(),
-        block_tx.clone(),
+        block_tx,
         ctx_stats.clone(),
     ));
 
