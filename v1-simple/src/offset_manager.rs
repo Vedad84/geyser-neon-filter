@@ -11,24 +11,25 @@ use crate::consumer_stats::ContextWithStats;
 
 /// Sorted structure with O(1) additions to the end in the most cases, from O(1) to O(log n) removals
 /// and O(1) gets minimum
+#[derive(Default)]
 struct PartitionOffsetManager {
     offsets: Vec<i64>,
     start: usize,
     len: usize,
     count: usize,
+    last_added: Option<i64>,
 }
 
 impl PartitionOffsetManager {
     pub fn new(capacity: usize) -> Self {
         Self {
             offsets: vec![0; capacity],
-            start: 0,
-            len: 0,
-            count: 0,
+            ..Default::default()
         }
     }
 
     pub fn append(&mut self, offset: i64) {
+        assert!(self.len == 0 || offset > self.offset(self.len - 1));
         if self.len == self.offsets.len() {
             if self.count < self.offsets.len() {
                 self.optimize();
@@ -37,13 +38,13 @@ impl PartitionOffsetManager {
                 self.grow();
             }
         }
-        assert!(self.len == 0 || offset > self.offset(self.len - 1));
         self.set_offset(self.len, offset);
+        self.last_added = Some(offset);
         self.len += 1;
         self.count += 1;
     }
 
-    pub fn remove(&mut self, offset: i64) -> bool {
+    pub fn remove(&mut self, offset: i64) -> Option<i64> {
         assert!(self.len > 0);
         let old_len = self.len;
         while self.offsets[self.start] == offset {
@@ -52,7 +53,10 @@ impl PartitionOffsetManager {
         }
         if self.len != old_len {
             self.count -= 1;
-            return true;
+            if self.len == 0 {
+                return self.last_added;
+            }
+            return Some(self.offsets[self.start] - 1)
         }
         assert!(self.len > 1);
         let mut last_index = self.absolute_index(self.len - 1);
@@ -62,7 +66,7 @@ impl PartitionOffsetManager {
         }
         if self.len != old_len {
             self.count -= 1;
-            return false;
+            return None;
         }
         match self.binary_search(offset) {
             None => panic!("Offset {offset} not found in partition!"),
@@ -82,7 +86,7 @@ impl PartitionOffsetManager {
             },
         }
         self.count -= 1;
-        false
+        None
     }
 
     fn binary_search(&self, offset: i64) -> Option<usize> {
@@ -184,8 +188,8 @@ impl OffsetManager {
         let Offset { partition, offset } = offset;
         let partition_manager = self.partitions.get_mut(&partition)
             .unwrap_or_else(|| panic!("Partition manager for partition {} for topic `{}` not found", partition, self.topic));
-        if partition_manager.remove(offset) {
-            self.consumer.store_offset(&self.topic, partition, offset)
+        if let Some(processed_upto) = partition_manager.remove(offset) {
+            self.consumer.store_offset(&self.topic, partition, processed_upto)
                 .unwrap_or_else(|err| error!("Failed to update offset for topic `{}`. Kafka error: {err}", self.topic));
         }
     }
