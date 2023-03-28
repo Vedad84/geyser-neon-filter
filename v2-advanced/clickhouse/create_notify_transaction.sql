@@ -15,7 +15,7 @@ TTL toDateTime(retrieved_time) + INTERVAL 60 DAY
 SETTINGS index_granularity=8192;
 
 CREATE TABLE IF NOT EXISTS events.notify_transaction_distributed ON CLUSTER '{cluster}' AS events.notify_transaction_local
-ENGINE = Distributed('{cluster}', events, notify_transaction_local, rand());
+ENGINE = Distributed('{cluster}', events, notify_transaction_local, xxHash64(CONCAT(toString(slot), arrayStringConcat(signature,''))));
 
 CREATE TABLE IF NOT EXISTS events.notify_transaction_queue ON CLUSTER '{cluster}' (
     notify_transaction_json String
