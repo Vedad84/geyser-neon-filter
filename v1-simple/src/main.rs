@@ -9,6 +9,7 @@ mod db_types;
 mod filter;
 mod filter_config;
 mod filter_config_hot_reload;
+mod offset_manager;
 mod prometheus;
 
 use std::sync::Arc;

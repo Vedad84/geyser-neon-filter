@@ -23,7 +23,7 @@ use crate::{
     filter_config::FilterConfig,
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Offset {
     pub partition: i32,
     pub offset: i64,

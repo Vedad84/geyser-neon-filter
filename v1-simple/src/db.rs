@@ -10,12 +10,12 @@ use deadpool_postgres::Manager;
 use deadpool_postgres::ManagerConfig;
 use deadpool_postgres::Pool;
 use deadpool_postgres::RecyclingMethod;
-use flume::Receiver;
+use flume::{Receiver, Sender};
 use kafka_common::kafka_structs::UpdateSlotStatus;
 use log::error;
 use log::info;
 use prometheus_client::metrics::gauge::Gauge;
-use rdkafka::consumer::{Consumer, StreamConsumer};
+use rdkafka::consumer::StreamConsumer;
 use tokio::select;
 use tokio::signal::unix::{signal, SignalKind};
 use tokio_postgres::NoTls;
@@ -36,6 +36,7 @@ use crate::db_statements::create_transaction_insert_statement;
 use crate::db_types::DbAccountInfo;
 use crate::db_types::DbBlockInfo;
 use crate::db_types::DbTransaction;
+use crate::offset_manager::{offset_manager_service, OffsetManagerCommand};
 
 pub async fn create_db_pool(config: Arc<AppConfig>) -> Result<Arc<Pool>> {
     let mut pg_config = tokio_postgres::Config::new();
@@ -130,17 +131,24 @@ pub async fn db_stmt_executor<M, F>(
     M: Send + Sync + 'static,
     F: Future<Output = Result<u64>> + Send + 'static,
 {
+    let (offsets_tx, offsets_rx) = flume::unbounded::<OffsetManagerCommand>();
+
+    tokio::spawn(offset_manager_service(topic.clone(), Arc::clone(&consumer), offsets_rx));
+
     loop {
         match queue_rx.recv_async().await {
-            Ok(queue_msg) => {
+            Ok((message, offset)) => {
                 queue_len_gauge.set(queue_rx.len() as f64);
+                if let Err(err) = offsets_tx.send_async(OffsetManagerCommand::StartProcessing(offset.clone())).await {
+                    error!("Unable to send offset being processed for topic `{topic}`. Offset manager service down? Error: {err}");
+                }
 
                 tokio::spawn(
                     process_message(
                         Arc::clone(&db_pool),
-                        Arc::clone(&consumer),
                         topic.clone(),
-                        queue_msg,
+                        (message, offset),
+                        offsets_tx.clone(),
                         Arc::clone(&stats),
                         process_msg_async,
                     ),
@@ -156,9 +164,9 @@ pub async fn db_stmt_executor<M, F>(
 
 async fn process_message<M, F>(
     db_pool: Arc<Pool>,
-    consumer: Arc<StreamConsumer<ContextWithStats>>,
     topic: String,
     queue_msg: QueueMsg<M>,
+    offsets_tx: Sender<OffsetManagerCommand>,
     stats: Arc<Stats>,
     process_msg_async: impl Fn(Arc<Client>, Arc<M>) -> F,
 ) where
@@ -196,6 +204,7 @@ async fn process_message<M, F>(
         }
     }
 
-    consumer.store_offset(&topic, offset.partition, offset.offset)
-        .unwrap_or_else(|err| error!("Failed to update offset for topic `{topic}`. Kafka error: {err}"));
+    if let Err(err) = offsets_tx.send_async(OffsetManagerCommand::ProcessedSuccessfully(offset)).await {
+        error!("Unable to send offset successfully processed status for topic `{topic}`. Offset manager service down?, error: {err}");
+    }
 }
