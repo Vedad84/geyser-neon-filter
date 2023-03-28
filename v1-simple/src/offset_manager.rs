@@ -230,69 +230,87 @@ mod tests {
     fn test_remove() {
         let mut offset_manager = PartitionOffsetManager::new(21);
         fill_20(&mut offset_manager);
-        offset_manager.remove(0);
+        assert_eq!(offset_manager.remove(0), Some(0));
 
         assert_eq!(offset_manager.start, 1);
         assert_eq!(offset_manager.len, 19);
+        assert_eq!(offset_manager.count, 19);
+        assert_eq!(offset_manager.last_added, Some(19));
         assert_eq!(offset_manager.offsets[0..21], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 0]);
 
-        offset_manager.remove(1);
+        assert_eq!(offset_manager.remove(1), Some(1));
 
         assert_eq!(offset_manager.start, 2);
         assert_eq!(offset_manager.len, 18);
+        assert_eq!(offset_manager.count, 18);
+        assert_eq!(offset_manager.last_added, Some(19));
         assert_eq!(offset_manager.offsets[0..21], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 0]);
 
-        offset_manager.remove(11);
+        assert_eq!(offset_manager.remove(11), None);
 
         assert_eq!(offset_manager.start, 2);
         assert_eq!(offset_manager.len, 18);
+        assert_eq!(offset_manager.count, 17);
+        assert_eq!(offset_manager.last_added, Some(19));
         assert_eq!(offset_manager.offsets[0..21], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 12, 13, 14, 15, 16, 17, 18, 19, 0]);
 
-        offset_manager.remove(13);
+        assert_eq!(offset_manager.remove(13), None);
 
         assert_eq!(offset_manager.start, 2);
         assert_eq!(offset_manager.len, 18);
+        assert_eq!(offset_manager.count, 16);
+        assert_eq!(offset_manager.last_added, Some(19));
         assert_eq!(offset_manager.offsets[0..21], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 12, 12, 14, 15, 16, 17, 18, 19, 0]);
 
-        offset_manager.remove(12);
+        assert_eq!(offset_manager.remove(12), None);
 
         assert_eq!(offset_manager.start, 2);
         assert_eq!(offset_manager.len, 18);
+        assert_eq!(offset_manager.count, 15);
+        assert_eq!(offset_manager.last_added, Some(19));
         assert_eq!(offset_manager.offsets[0..21], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10, 10, 14, 15, 16, 17, 18, 19, 0]);
 
-        offset_manager.remove(10);
+        assert_eq!(offset_manager.remove(10), None);
 
         assert_eq!(offset_manager.start, 2);
         assert_eq!(offset_manager.len, 18);
+        assert_eq!(offset_manager.count, 14);
+        assert_eq!(offset_manager.last_added, Some(19));
         assert_eq!(offset_manager.offsets[0..21], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 9, 9, 9, 14, 15, 16, 17, 18, 19, 0]);
 
-        offset_manager.remove(18);
+        assert_eq!(offset_manager.remove(18), None);
 
         assert_eq!(offset_manager.start, 2);
         assert_eq!(offset_manager.len, 18);
+        assert_eq!(offset_manager.count, 13);
+        assert_eq!(offset_manager.last_added, Some(19));
         assert_eq!(offset_manager.offsets[0..21], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 9, 9, 9, 14, 15, 16, 17, 17, 19, 0]);
 
-        offset_manager.remove(19);
+        assert_eq!(offset_manager.remove(19), None);
 
         assert_eq!(offset_manager.start, 2);
         assert_eq!(offset_manager.len, 17);
+        assert_eq!(offset_manager.count, 12);
+        assert_eq!(offset_manager.last_added, Some(19));
         assert_eq!(offset_manager.offsets[0..21], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 9, 9, 9, 14, 15, 16, 17, 17, 19, 0]);
 
-        offset_manager.remove(17);
-        offset_manager.remove(4);
-        offset_manager.remove(2);
-        offset_manager.remove(3);
-        offset_manager.remove(14);
-        offset_manager.remove(7);
-        offset_manager.remove(6);
-        offset_manager.remove(16);
-        offset_manager.remove(5);
-        offset_manager.remove(15);
-        offset_manager.remove(8);
-        offset_manager.remove(9);
+        assert_eq!(offset_manager.remove(17), None);
+        assert_eq!(offset_manager.remove(4), None);
+        assert_eq!(offset_manager.remove(2), Some(2));
+        assert_eq!(offset_manager.remove(3), Some(4));
+        assert_eq!(offset_manager.remove(14), None);
+        assert_eq!(offset_manager.remove(7), None);
+        assert_eq!(offset_manager.remove(6), None);
+        assert_eq!(offset_manager.remove(16), None);
+        assert_eq!(offset_manager.remove(5), Some(7));
+        assert_eq!(offset_manager.remove(15), None);
+        assert_eq!(offset_manager.remove(8), Some(8));
+        assert_eq!(offset_manager.remove(9), Some(19));
 
         assert_eq!(offset_manager.start, 15);
         assert_eq!(offset_manager.len, 0);
+        assert_eq!(offset_manager.count, 0);
+        assert_eq!(offset_manager.last_added, Some(19));
         assert_eq!(offset_manager.offsets[0..21], [0, 1, 2, 3, 3, 5, 5, 5, 8, 9, 9, 9, 9, 9, 9, 15, 16, 17, 17, 19, 0]);
     }
 
@@ -304,11 +322,15 @@ mod tests {
         offset_manager.remove(19);
         assert_eq!(offset_manager.start, 0);
         assert_eq!(offset_manager.len, 19);
+        assert_eq!(offset_manager.count, 18);
+        assert_eq!(offset_manager.last_added, Some(19));
         assert_eq!(offset_manager.offsets[0..21], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 17, 19, 0]);
 
         offset_manager.append(20);
         assert_eq!(offset_manager.start, 0);
         assert_eq!(offset_manager.len, 20);
+        assert_eq!(offset_manager.count, 19);
+        assert_eq!(offset_manager.last_added, Some(20));
         assert_eq!(offset_manager.offsets[0..21], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 17, 20, 0]);
     }
 
@@ -320,6 +342,8 @@ mod tests {
         }
         assert_eq!(offset_manager.start, 0);
         assert_eq!(offset_manager.len, 8);
+        assert_eq!(offset_manager.count, 8);
+        assert_eq!(offset_manager.last_added, Some(7));
         assert_eq!(offset_manager.offsets, [0, 1, 2, 3, 4, 5, 6, 7]);
 
         for i in 2..6 {
@@ -328,11 +352,15 @@ mod tests {
 
         assert_eq!(offset_manager.start, 0);
         assert_eq!(offset_manager.len, 8);
+        assert_eq!(offset_manager.count, 4);
+        assert_eq!(offset_manager.last_added, Some(7));
         assert_eq!(offset_manager.offsets, [0, 1, 1, 1, 1, 1, 6, 7]);
 
         offset_manager.append(8);
         assert_eq!(offset_manager.start, 0);
         assert_eq!(offset_manager.len, 5);
+        assert_eq!(offset_manager.count, 5);
+        assert_eq!(offset_manager.last_added, Some(8));
         assert_eq!(offset_manager.offsets, [0, 1, 6, 7, 8, 1, 6, 7]);
 
         offset_manager.remove(6);
@@ -341,6 +369,8 @@ mod tests {
 
         assert_eq!(offset_manager.start, 3);
         assert_eq!(offset_manager.len, 2);
+        assert_eq!(offset_manager.count, 2);
+        assert_eq!(offset_manager.last_added, Some(8));
         assert_eq!(offset_manager.offsets, [0, 0, 0, 7, 8, 1, 6, 7]);
 
         for i in 9..15 {
@@ -349,6 +379,8 @@ mod tests {
 
         assert_eq!(offset_manager.start, 3);
         assert_eq!(offset_manager.len, 8);
+        assert_eq!(offset_manager.count, 8);
+        assert_eq!(offset_manager.last_added, Some(14));
         assert_eq!(offset_manager.offsets, [12, 13, 14, 7, 8, 9, 10, 11]);
 
         offset_manager.remove(13);
@@ -358,6 +390,8 @@ mod tests {
 
         assert_eq!(offset_manager.start, 3);
         assert_eq!(offset_manager.len, 7);
+        assert_eq!(offset_manager.count, 4);
+        assert_eq!(offset_manager.last_added, Some(14));
         assert_eq!(offset_manager.offsets, [12, 12, 14, 7, 8, 8, 8, 11]);
 
         for i in 16..20 {
@@ -366,6 +400,8 @@ mod tests {
 
         assert_eq!(offset_manager.start, 3);
         assert_eq!(offset_manager.len, 8);
+        assert_eq!(offset_manager.count, 8);
+        assert_eq!(offset_manager.last_added, Some(19));
         assert_eq!(offset_manager.offsets, [17, 18, 19, 7, 8, 11, 12, 16]);
     }
 
@@ -377,6 +413,8 @@ mod tests {
         }
         assert_eq!(offset_manager.start, 0);
         assert_eq!(offset_manager.len, 5);
+        assert_eq!(offset_manager.count, 5);
+        assert_eq!(offset_manager.last_added, Some(4));
         assert_eq!(offset_manager.offsets, [0, 1, 2, 3, 4]);
 
         for i in 0..2 {
@@ -385,6 +423,8 @@ mod tests {
 
         assert_eq!(offset_manager.start, 2);
         assert_eq!(offset_manager.len, 3);
+        assert_eq!(offset_manager.count, 3);
+        assert_eq!(offset_manager.last_added, Some(4));
         assert_eq!(offset_manager.offsets, [0, 1, 2, 3, 4]);
 
         offset_manager.append(5);
@@ -392,21 +432,29 @@ mod tests {
 
         assert_eq!(offset_manager.start, 2);
         assert_eq!(offset_manager.len, 5);
+        assert_eq!(offset_manager.count, 5);
+        assert_eq!(offset_manager.last_added, Some(6));
         assert_eq!(offset_manager.offsets, [5, 6, 2, 3, 4]);
 
         offset_manager.append(7);
 
         assert_eq!(offset_manager.start, 2);
         assert_eq!(offset_manager.len, 6);
+        assert_eq!(offset_manager.count, 6);
+        assert_eq!(offset_manager.last_added, Some(7));
         assert_eq!(offset_manager.offsets, [5, 6, 2, 3, 4, 5, 6, 7, 0, 0]);
     }
 
     fn fill_20(offset_manager: &mut PartitionOffsetManager) {
+        assert_eq!(offset_manager.last_added, None);
         for i in 0..20 {
             offset_manager.append(i);
+            assert_eq!(offset_manager.start, 0);
+            assert_eq!(offset_manager.last_added, Some(i));
+            assert_eq!(offset_manager.count, i as usize + 1);
+            assert_eq!(offset_manager.len, i as usize + 1);
         }
-        assert_eq!(offset_manager.start, 0);
-        assert_eq!(offset_manager.len, 20);
+
         assert_eq!(offset_manager.offsets, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 0]);
     }
 }
