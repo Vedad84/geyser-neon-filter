@@ -13,8 +13,7 @@ use std::sync::{
     Arc,
 };
 use tokio::select;
-use tokio::signal::unix::{signal, SignalKind};
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, watch};
 
 use crate::{
     app_config::AppConfig,
@@ -159,16 +158,16 @@ pub async fn run_consumer<T, S>(
     topic: String,
     filter_tx: Sender<QueueMsg<S>>,
     ctx_stats: ContextWithStats,
+    mut sigterm_rx: watch::Receiver<()>,
 ) where
     T: for<'a> Deserialize<'a> + Send + 'static + GetMessageType + GetEvent,
     S: From<T> + Send + 'static,
 {
-    let mut shutdown_stream = signal(SignalKind::terminate()).unwrap();
     info!("The consumer loop for topic `{topic}` is about to start: {:?}", consumer.position().unwrap());
 
     loop {
         let msg_result: Result<_, _> = select! {
-            _ = shutdown_stream.recv() => break,
+            _ = sigterm_rx.changed() => break,
             msg_result = consumer.recv() => msg_result,
         };
 

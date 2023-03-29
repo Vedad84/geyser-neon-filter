@@ -11,6 +11,7 @@ mod filter_config;
 mod filter_config_hot_reload;
 mod offset_manager;
 mod prometheus;
+mod sigterm_notifier;
 
 use std::sync::Arc;
 
@@ -38,6 +39,7 @@ use log::{info, Log};
 use prometheus::start_prometheus;
 use tokio::{fs, sync::RwLock};
 use crate::consumer::{new_consumer, QueueMsg};
+use crate::sigterm_notifier::sigterm_notifier;
 
 async fn run(mut config: AppConfig, filter_config: FilterConfig) {
     let logger: &'static Logger = fast_log::init(fast_log::Config::new().console().file_split(
@@ -79,6 +81,8 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
 
     let config = Arc::new(config);
 
+    let (sigterm_tx, sigterm_rx) = tokio::sync::watch::channel(());
+
     let prometheus = tokio::spawn(start_prometheus(
         ctx_stats.stats.clone(),
         update_account_topic.clone(),
@@ -86,6 +90,7 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
         notify_transaction_topic.clone(),
         notify_block_topic.clone(),
         prometheus_port,
+        sigterm_rx.clone(),
     ));
 
     let filter_config = Arc::new(RwLock::new(filter_config));
@@ -106,7 +111,9 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
     let (transaction_tx, transaction_rx) = flume::bounded::<QueueMsg<DbTransaction>>(transaction_capacity);
     let (block_tx, block_rx) = flume::bounded::<QueueMsg<DbBlockInfo>>(block_capacity);
 
-    let cfg_watcher = tokio::spawn(async_watch(config.clone(), filter_config.clone()));
+    tokio::spawn(sigterm_notifier(sigterm_tx));
+
+    let cfg_watcher = tokio::spawn(async_watch(config.clone(), filter_config.clone(), sigterm_rx.clone()));
 
     let consumer_update_account = new_consumer(
         &config,
@@ -120,6 +127,7 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
         update_account_topic.clone(),
         account_tx,
         ctx_stats.clone(),
+        sigterm_rx.clone(),
     ));
 
     let consumer_update_slot = new_consumer(
@@ -134,6 +142,7 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
         update_slot_topic.clone(),
         slot_tx,
         ctx_stats.clone(),
+        sigterm_rx.clone(),
     ));
 
     let consumer_transaction = new_consumer(
@@ -148,6 +157,7 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
         notify_transaction_topic.clone(),
         transaction_tx,
         ctx_stats.clone(),
+        sigterm_rx.clone(),
     ));
 
     let consumer_notify_block = new_consumer(
@@ -162,6 +172,7 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
         notify_block_topic.clone(),
         block_tx,
         ctx_stats.clone(),
+        sigterm_rx.clone(),
     ));
 
     let account_db_stmt_executor = tokio::spawn(db_stmt_executor(
@@ -171,6 +182,7 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
         Arc::clone(&ctx_stats.stats),
         account_rx,
         ctx_stats.stats.queue_len_update_account.clone(),
+        sigterm_rx.clone(),
         exec_account_statement,
     ));
 
@@ -181,6 +193,7 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
         Arc::clone(&ctx_stats.stats),
         slot_rx,
         ctx_stats.stats.queue_len_update_slot.clone(),
+        sigterm_rx.clone(),
         exec_slot_statement,
     ));
 
@@ -191,6 +204,7 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
         Arc::clone(&ctx_stats.stats),
         transaction_rx,
         ctx_stats.stats.queue_len_notify_transaction.clone(),
+        sigterm_rx.clone(),
         exec_transaction_statement,
     ));
 
@@ -201,6 +215,7 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
         Arc::clone(&ctx_stats.stats),
         block_rx,
         ctx_stats.stats.queue_len_notify_block.clone(),
+        sigterm_rx.clone(),
         exec_block_statement,
     ));
 

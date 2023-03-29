@@ -13,7 +13,7 @@ use hyper::{
 };
 use log::info;
 use prometheus_client::{encoding::text::encode, registry::Registry};
-use tokio::signal::unix::{signal, SignalKind};
+use tokio::sync::watch;
 
 use crate::consumer_stats::Stats;
 
@@ -24,6 +24,7 @@ pub async fn start_prometheus(
     notify_transaction_topic: String,
     notify_block_topic: String,
     port: u16,
+    sigterm_rx: watch::Receiver<()>,
 ) {
     let mut registry = <Registry>::default();
 
@@ -136,12 +137,10 @@ pub async fn start_prometheus(
     );
 
     let metrics_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), port);
-    start_metrics_server(metrics_addr, registry).await
+    start_metrics_server(metrics_addr, registry, sigterm_rx).await
 }
 
-async fn start_metrics_server(metrics_addr: SocketAddr, registry: Registry) {
-    let mut shutdown_stream = signal(SignalKind::terminate()).unwrap();
-
+async fn start_metrics_server(metrics_addr: SocketAddr, registry: Registry, mut sigterm_rx: watch::Receiver<()>,) {
     info!("Starting metrics server on {metrics_addr}");
 
     let registry = Arc::new(registry);
@@ -154,7 +153,7 @@ async fn start_metrics_server(metrics_addr: SocketAddr, registry: Registry) {
             }
         }))
         .with_graceful_shutdown(async move {
-            shutdown_stream.recv().await;
+            sigterm_rx.changed().await.ok();
         })
         .await
         .expect("Failed to bind hyper server with graceful_shutdown");

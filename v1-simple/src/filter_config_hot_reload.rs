@@ -11,9 +11,8 @@ use std::fmt::Debug;
 use std::hash::Hash;
 use std::sync::Arc;
 use tokio::select;
-use tokio::signal::unix::{signal, SignalKind};
 use tokio::sync::mpsc::{channel, Receiver};
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, watch};
 
 struct HDiff<'a, T: 'a + Eq + Hash, S: std::hash::BuildHasher> {
     added: Difference<'a, T, S>,
@@ -93,15 +92,14 @@ async fn async_watcher() -> notify::Result<(RecommendedWatcher, Receiver<notify:
 pub async fn async_watch(
     config: Arc<AppConfig>,
     filter_config: Arc<RwLock<FilterConfig>>,
+    mut sigterm_rx: watch::Receiver<()>,
 ) -> notify::Result<()> {
     let (mut watcher, mut rx) = async_watcher().await?;
 
     watcher.watch(config.filter_config_path.as_ref(), RecursiveMode::Recursive)?;
 
-    let mut shutdown_stream = signal(SignalKind::terminate()).unwrap();
-
     while let Some(res) = select! {
-        _ = shutdown_stream.recv() => None,
+        _ = sigterm_rx.changed() => None,
         recv_result = rx.recv() => recv_result,
     } {
         match res {

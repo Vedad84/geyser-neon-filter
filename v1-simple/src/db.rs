@@ -17,7 +17,7 @@ use log::info;
 use prometheus_client::metrics::gauge::Gauge;
 use rdkafka::consumer::StreamConsumer;
 use tokio::select;
-use tokio::signal::unix::{signal, SignalKind};
+use tokio::sync::watch;
 use tokio_postgres::NoTls;
 
 use crate::app_config::AppConfig;
@@ -119,6 +119,7 @@ pub async fn exec_slot_statement(
     insert_slot_status_internal(db_slot_info, &statement, &client).await
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn db_stmt_executor<M, F>(
     consumer: Arc<StreamConsumer<ContextWithStats>>,
     topic: String,
@@ -126,6 +127,7 @@ pub async fn db_stmt_executor<M, F>(
     stats: Arc<Stats>,
     queue_rx: Receiver<QueueMsg<M>>,
     queue_len_gauge: Gauge<f64, AtomicU64>,
+    sigterm_rx: watch::Receiver<()>,
     process_msg_async: fn (Arc<Client>, Arc<M>) -> F,
 ) where
     M: Send + Sync + 'static,
@@ -149,6 +151,7 @@ pub async fn db_stmt_executor<M, F>(
                         topic.clone(),
                         (message, offset),
                         offsets_tx.clone(),
+                        sigterm_rx.clone(),
                         Arc::clone(&stats),
                         process_msg_async,
                     ),
@@ -167,22 +170,23 @@ async fn process_message<M, F>(
     topic: String,
     queue_msg: QueueMsg<M>,
     offsets_tx: Sender<OffsetManagerCommand>,
+    mut sigterm_rx: watch::Receiver<()>,
     stats: Arc<Stats>,
     process_msg_async: impl Fn(Arc<Client>, Arc<M>) -> F,
 ) where
     F: Future<Output = Result<u64>>,
 {
     let (message, offset) = queue_msg;
-    let mut shutdown_stream = signal(SignalKind::terminate()).unwrap();
+    let mut idle_interval = tokio::time::interval(Duration::from_millis(50));
 
     let client = loop {
         select! {
-            _ = shutdown_stream.recv() => return,
+            _ = sigterm_rx.changed() => return,
             db_pool_result = db_pool.get() => match db_pool_result {
                 Ok(client) => break Arc::new(client),
                 Err(err) => {
                     error!("Failed to get a client from the pool, error: {err:?}");
-                    tokio::time::sleep(Duration::from_millis(50)).await;
+                    idle_interval.tick().await;
                 },
             },
         };
@@ -191,7 +195,7 @@ async fn process_message<M, F>(
     loop {
         let process_msg_future = process_msg_async(Arc::clone(&client), Arc::clone(&message));
         let result = select! {
-            _ = shutdown_stream.recv() => return,
+            _ = sigterm_rx.changed() => return,
             result = process_msg_future => result,
         };
         match result {
@@ -199,7 +203,7 @@ async fn process_message<M, F>(
             Err(err) => {
                 error!("Failed to execute store value from topic `{topic}` into the DB, error {err}");
                 stats.db_errors.inc();
-                tokio::time::sleep(Duration::from_millis(50)).await;
+                idle_interval.tick().await;
             }
         }
     }

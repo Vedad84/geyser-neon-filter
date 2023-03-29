@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
-use std::collections::HashMap;
 use std::sync::Arc;
+use ahash::AHashMap;
 
 use flume::Receiver;
 use log::{error, info};
@@ -168,14 +168,14 @@ impl PartitionOffsetManager {
 pub struct OffsetManager {
     topic: String,
     consumer: Arc<StreamConsumer<ContextWithStats>>,
-    partitions: HashMap<i32, PartitionOffsetManager>,
+    partitions: AHashMap<i32, PartitionOffsetManager>,
 }
 
 impl OffsetManager {
     const INITIAL_CAPACITY: usize = 1024;
 
     pub fn new(topic: String, consumer: Arc<StreamConsumer<ContextWithStats>>) -> Self {
-        Self { topic, consumer, partitions: HashMap::new() }
+        Self { topic, consumer, partitions: AHashMap::new() }
     }
 
     pub fn append(&mut self, offset: &Offset) {
