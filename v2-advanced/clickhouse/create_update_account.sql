@@ -4,13 +4,13 @@ CREATE TABLE IF NOT EXISTS events.update_account_local ON CLUSTER '{cluster}' (
     pubkey Array(UInt8) CODEC(ZSTD),
     lamports UInt64 CODEC(DoubleDelta, ZSTD),
     owner Array(UInt8) CODEC(ZSTD),
-    executable Bool CODEC(DoubleDelta),
+    executable Bool CODEC(ZSTD),
     rent_epoch UInt64 CODEC(DoubleDelta, ZSTD),
     data Array(UInt8) CODEC(ZSTD),
     write_version UInt64 CODEC(DoubleDelta, ZSTD),
     txn_signature Array(Nullable(UInt8)) CODEC(ZSTD),
-    slot UInt64 CODEC(DoubleDelta),
-    is_startup Bool CODEC(DoubleDelta),
+    slot UInt64 CODEC(DoubleDelta, ZSTD),
+    is_startup Bool CODEC(ZSTD),
     retrieved_time DateTime64 CODEC(DoubleDelta, ZSTD)
 ) ENGINE = ReplicatedMergeTree(
     '/clickhouse/tables/{shard}/update_account_local',
@@ -20,8 +20,9 @@ PARTITION BY toYYYYMMDD(retrieved_time)
 ORDER BY (pubkey, slot, write_version)
 SETTINGS index_granularity=8192;
 
+
 CREATE TABLE IF NOT EXISTS events.update_account_distributed ON CLUSTER '{cluster}' AS events.update_account_local
-ENGINE = Distributed('{cluster}', events, update_account_local, rand());
+ENGINE = Distributed('{cluster}', events, update_account_local, xxHash64(CONCAT(toString(slot), arrayStringConcat(txn_signature,''))));
 
 CREATE TABLE IF NOT EXISTS events.update_account_queue ON CLUSTER '{cluster}' (
     pubkey Array(UInt8),
