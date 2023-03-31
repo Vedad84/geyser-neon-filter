@@ -4,32 +4,35 @@
         "keepalive": "60s",
         "pool_idle_timeout": "5s",
         "no_delay": true,
-        "reuse_address": true
+        "reuse_address": true,
+        "retries": 3,
+        "backoff": "1s"
     },
+    "log_level": "Info",
     "log_path": "/var/log/neon/scheduler.log",
     "servers": [
         "http://10.1.0.2:8123",
-        "http://10.1.0.2:8123"
+        "http://10.1.0.3:8123"
     ],
     "username": "",
     "password": "",
     "tasks": [
         {
-            "task_name": "Two queries",
+            "task_name": "Two multiply queries",
             "queries": [
-                "query1",
-                "query2"
+                "SELECT 1*1;",
+                "SELECT 2*1;"
             ],
-            "task_interval": "10m"
+            "task_interval": "1m"
         },
         {
-            "task_name": "Three queries",
+            "task_name": "Three sum queries",
             "queries": [
-                "query1",
-                "query2",
-                "query3"
+                "SELECT 1+1;",
+                "SELECT 2+1;",
+                "SELECT 3+1;"
             ],
-            "task_interval": "10s"
+            "task_interval": "3s"
         }
     ]
 }

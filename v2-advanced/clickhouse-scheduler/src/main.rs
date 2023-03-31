@@ -14,7 +14,8 @@ use fast_log::Logger;
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
 use tokio::signal::unix::{signal, SignalKind};
-use tokio::sync::Notify;
+
+use log::{Log, info};
 
 async fn read_file_to_string(path: &str) -> Result<String, std::io::Error> {
     let mut file = File::open(path).await?;
@@ -48,7 +49,7 @@ async fn main() {
 
     let config: Config = serde_json::from_str(&data).expect("Unable to parse JSON config");
 
-    let _logger: &'static Logger = fast_log::init(fast_log::Config::new().console().file_split(
+    let logger: &'static Logger = fast_log::init(fast_log::Config::new().console().file_split(
         &config.log_path,
         LogSize::KB(512),
         RollingType::All,
@@ -56,17 +57,21 @@ async fn main() {
     ))
     .expect("Failed to initialize fast_log");
 
-    let shutdown = Arc::new(Notify::new());
-    let shutdown_signal = shutdown.clone();
+    logger.set_level(config.log_level.clone().into());
+
+    let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
 
     let sigterm_handler = tokio::spawn(async move {
         let mut signal =
             signal(SignalKind::terminate()).expect("Unable to register SIGTERM handler");
         signal.recv().await;
-        shutdown_signal.notify_waiters();
+        info!("SIGTERM received, shutting down");
+        let _ = shutdown_tx.send(());
     });
 
-    start_tasks(config, shutdown).await;
+    start_tasks(Arc::new(config), shutdown_rx).await;
 
     let _ = sigterm_handler.await;
+
+    logger.flush();
 }

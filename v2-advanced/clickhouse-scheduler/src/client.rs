@@ -27,7 +27,7 @@ impl ClickHouse {
         for i in config.servers.iter() {
             let username = config.username.clone();
             let password = config.password.clone();
-            let http_client = build_client(&config);
+            let http_client = build_client(config);
 
             let ch_client = match (config.username.is_empty(), config.password.is_empty()) {
                 (false, false) => clickhouse::Client::with_http_client(http_client).with_url(i),
