@@ -205,7 +205,7 @@ pub async fn offset_manager_service(
     consumer: Arc<StreamConsumer<ContextWithStats>>,
     receiver: Receiver<OffsetManagerCommand>,
 ) {
-    let mut offset_manager = OffsetManager::new(topic, consumer);
+    let mut offset_manager = OffsetManager::new(topic.clone(), consumer);
     while let Ok(command) = receiver.recv_async().await {
         match command {
             OffsetManagerCommand::StartProcessing(offset) => offset_manager.append(&offset),
@@ -213,7 +213,7 @@ pub async fn offset_manager_service(
         }
     }
 
-    info!("Offset manager service shut down");
+    info!("Offset manager service for topic: `{topic}` is shut down");
 }
 
 #[cfg(test)]
