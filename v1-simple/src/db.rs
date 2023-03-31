@@ -127,7 +127,7 @@ pub async fn db_stmt_executor<M, F>(
     stats: Arc<Stats>,
     queue_rx: Receiver<QueueMsg<M>>,
     queue_len_gauge: Gauge<f64, AtomicU64>,
-    mut sigterm_rx: watch::Receiver<()>,
+    sigterm_rx: watch::Receiver<()>,
     process_msg_async: fn (Arc<Client>, Arc<M>) -> F,
 ) where
     M: Send + Sync + 'static,
@@ -137,29 +137,19 @@ pub async fn db_stmt_executor<M, F>(
 
     tokio::spawn(offset_manager_service(topic.clone(), Arc::clone(&consumer), offsets_rx));
 
-    let mut idle_interval = tokio::time::interval(Duration::from_millis(50));
-    'main: while let Ok((message, offset)) = queue_rx.recv_async().await {
+    while let Ok((message, offset)) = queue_rx.recv_async().await {
         queue_len_gauge.set(queue_rx.len() as f64);
         if let Err(err) = offsets_tx.send_async(OffsetManagerCommand::StartProcessing(offset.clone())).await {
             error!("Unable to send offset being processed for topic `{topic}`. Offset manager service down? Error: {err}");
         }
 
-        let client = loop {
-            select! {
-                _ = sigterm_rx.changed() => continue 'main,
-                db_pool_result = db_pool.get() => match db_pool_result {
-                    Ok(client) => break Arc::new(client),
-                    Err(err) => {
-                        error!("Failed to get a client from the pool, error: {err:?}");
-                        idle_interval.tick().await;
-                    },
-                },
-            };
-        };
+        while db_pool.status().available == 0 {
+            tokio::task::yield_now().await;
+        }
 
         tokio::spawn(
             process_message(
-                client,
+                Arc::clone(&db_pool),
                 topic.clone(),
                 (message, offset),
                 offsets_tx.clone(),
@@ -176,7 +166,7 @@ pub async fn db_stmt_executor<M, F>(
 
 #[allow(clippy::too_many_arguments)]
 async fn process_message<M, F>(
-    client: Arc<Client>,
+    db_pool: Arc<Pool>,
     topic: String,
     queue_msg: QueueMsg<M>,
     offsets_tx: Sender<OffsetManagerCommand>,
@@ -190,6 +180,19 @@ async fn process_message<M, F>(
 {
     let (message, offset) = queue_msg;
     let mut idle_interval = tokio::time::interval(Duration::from_millis(50));
+
+    let client = loop {
+        select! {
+                _ = sigterm_rx.changed() => return,
+                db_pool_result = db_pool.get() => match db_pool_result {
+                    Ok(client) => break Arc::new(client),
+                    Err(err) => {
+                        error!("Failed to get a client from the pool, error: {err:?}");
+                        idle_interval.tick().await;
+                    },
+                },
+            };
+    };
 
     loop {
         let process_msg_future = process_msg_async(Arc::clone(&client), Arc::clone(&message));
