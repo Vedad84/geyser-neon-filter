@@ -138,7 +138,7 @@ pub async fn db_stmt_executor<M, F>(
     tokio::spawn(offset_manager_service(topic.clone(), Arc::clone(&consumer), offsets_rx));
 
     let mut idle_interval = tokio::time::interval(Duration::from_millis(50));
-    while let Ok((message, offset)) = queue_rx.recv_async().await {
+    'main: while let Ok((message, offset)) = queue_rx.recv_async().await {
         queue_len_gauge.set(queue_rx.len() as f64);
         if let Err(err) = offsets_tx.send_async(OffsetManagerCommand::StartProcessing(offset.clone())).await {
             error!("Unable to send offset being processed for topic `{topic}`. Offset manager service down? Error: {err}");
@@ -146,7 +146,7 @@ pub async fn db_stmt_executor<M, F>(
 
         let client = loop {
             select! {
-                _ = sigterm_rx.changed() => return,
+                _ = sigterm_rx.changed() => continue 'main,
                 db_pool_result = db_pool.get() => match db_pool_result {
                     Ok(client) => break Arc::new(client),
                     Err(err) => {
