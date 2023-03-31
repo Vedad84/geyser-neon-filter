@@ -72,3 +72,17 @@ AS  SELECT pubkey,
            is_startup,
            retrieved_time
 FROM events.temp_update_account_queue;
+
+CREATE TABLE IF NOT EXISTS events.items_to_move (
+    pubkey Array(UInt8),
+    lamports UInt64,
+    owner Array(UInt8),
+    executable Bool,
+    rent_epoch UInt64,
+    data Array(UInt8),
+    write_version Int64,
+    txn_signature Array(UInt8) DEFAULT [],
+    slot UInt64,
+    is_startup Bool,
+    retrieved_time DateTime64
+) ENGINE = Memory;
