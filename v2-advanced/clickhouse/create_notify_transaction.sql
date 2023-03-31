@@ -4,7 +4,8 @@ CREATE TABLE IF NOT EXISTS events.notify_transaction_local ON CLUSTER '{cluster}
     slot UInt64 CODEC(DoubleDelta, ZSTD),
     signature Array(UInt8) CODEC(ZSTD),
     notify_transaction_json String CODEC(ZSTD(5)),
-    retrieved_time DateTime64 CODEC(DoubleDelta, ZSTD)
+    retrieved_time DateTime64 CODEC(DoubleDelta, ZSTD),
+    idx UInt64 CODEC(DoubleDelta, ZSTD)
 ) ENGINE = ReplicatedMergeTree(
     '/clickhouse/tables/{shard}/notify_transaction_local',
     '{replica}'
@@ -30,5 +31,6 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS events.notify_transaction_queue_mv ON CLU
 SELECT JSONExtract(notify_transaction_json, 'slot', 'UInt64') AS slot,
        JSONExtract(notify_transaction_json, 'signature', 'Array(Nullable(UInt8))') AS signature,
        notify_transaction_json,
-       parseDateTime64BestEffort(JSONExtract(notify_transaction_json, 'retrieved_time', 'String')) AS retrieved_time
+       parseDateTime64BestEffort(JSONExtract(notify_transaction_json, 'retrieved_time', 'String')) AS retrieved_time,
+       JSONExtract(notify_transaction_json, 'index', 'UInt64') AS idx
 FROM events.notify_transaction_queue;
