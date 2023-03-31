@@ -15,9 +15,13 @@ CREATE TABLE IF NOT EXISTS events.temp_update_account_local ON CLUSTER '{cluster
     '/clickhouse/tables/{shard}/temp_update_account_local',
     '{replica}'
 ) PRIMARY KEY (txn_signature, slot, pubkey)
-PARTITION BY slot % 4500
+PARTITION BY toInt32(slot / 4500)
 ORDER BY (txn_signature, slot, pubkey)
 SETTINGS index_granularity=8192;
+
+
+CREATE TABLE IF NOT EXISTS events.temp_update_account_distributed ON CLUSTER '{cluster}' AS events.temp_update_account_local
+    ENGINE = Distributed('{cluster}', events, temp_update_account_local, xxHash64(CONCAT(toString(slot), arrayStringConcat(txn_signature,''))));
 
 
 CREATE TABLE IF NOT EXISTS events.temp_update_account_processed_local ON CLUSTER '{cluster}' (
@@ -28,13 +32,13 @@ CREATE TABLE IF NOT EXISTS events.temp_update_account_processed_local ON CLUSTER
     '/clickhouse/tables/{shard}/temp_update_account_processed_local',
     '{replica}'
 ) PRIMARY KEY (txn_signature, slot, pubkey)
-PARTITION BY slot % 4500
+PARTITION BY toInt32(slot / 4500)
 ORDER BY (txn_signature, slot, pubkey)
 SETTINGS index_granularity=8192;
 
 
-CREATE TABLE IF NOT EXISTS events.temp_update_account_distributed ON CLUSTER '{cluster}' AS events.temp_update_account_local
-    ENGINE = Distributed('{cluster}', events, temp_update_account_local, xxHash64(CONCAT(toString(slot), arrayStringConcat(txn_signature,''))));
+CREATE TABLE IF NOT EXISTS events.temp_update_account_processed_distributed ON CLUSTER '{cluster}' AS events.temp_update_account_processed_local
+    ENGINE = Distributed('{cluster}', events, temp_update_account_processed_local, xxHash64(CONCAT(toString(slot), arrayStringConcat(txn_signature,''))));
 
 
 CREATE TABLE IF NOT EXISTS events.temp_update_account_queue ON CLUSTER '{cluster}' (
@@ -44,7 +48,7 @@ CREATE TABLE IF NOT EXISTS events.temp_update_account_queue ON CLUSTER '{cluster
     executable Bool,
     rent_epoch UInt64,
     data Array(UInt8),
-    txn_signature Array(Nullable(UInt8)),
+    txn_signature Array(UInt8) DEFAULT [] CODEC(ZSTD),
     slot UInt64,
     is_startup Bool,
     retrieved_time DateTime64 DEFAULT now64()
@@ -54,6 +58,7 @@ kafka_topic_list = 'update_account',
 kafka_group_name = 'clickhouse',
 kafka_num_consumers = 1,
 kafka_format = 'JSONEachRow';
+
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS events.temp_update_account_queue_mv ON CLUSTER '{cluster}' to events.temp_update_account_distributed
 AS  SELECT pubkey,
