@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS events.update_account_local ON CLUSTER '{cluster}' (
     executable Bool CODEC(ZSTD),
     rent_epoch UInt64 CODEC(DoubleDelta, ZSTD),
     data Array(UInt8) CODEC(ZSTD),
-    write_version UInt64 CODEC(DoubleDelta, ZSTD),
+    write_version Int64 CODEC(DoubleDelta, ZSTD),
     txn_signature Array(Nullable(UInt8)) CODEC(ZSTD),
     slot UInt64 CODEC(DoubleDelta, ZSTD),
     is_startup Bool CODEC(ZSTD),
@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS events.update_account_local ON CLUSTER '{cluster}' (
     '/clickhouse/tables/{shard}/update_account_local',
     '{replica}'
 ) PRIMARY KEY (pubkey, slot, write_version)
-PARTITION BY toYYYYMMDD(retrieved_time)
+PARTITION BY toInt32(slot / 216000)
 ORDER BY (pubkey, slot, write_version)
 SETTINGS index_granularity=8192;
 

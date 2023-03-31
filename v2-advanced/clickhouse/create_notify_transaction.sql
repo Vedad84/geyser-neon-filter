@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS events.notify_transaction_local ON CLUSTER '{cluster}
     '/clickhouse/tables/{shard}/notify_transaction_local',
     '{replica}'
 ) PRIMARY KEY (signature, slot)
-PARTITION BY toYYYYMMDD(retrieved_time)
+PARTITION BY toInt32(slot / 216000)
 ORDER BY (signature, slot)
 TTL toDateTime(retrieved_time) + INTERVAL 60 DAY
 SETTINGS index_granularity=8192;
