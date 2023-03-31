@@ -1,0 +1,28 @@
+{
+    "log_path": "/var/log/neon/scheduler.log",
+    "servers": [
+        "http://10.1.0.2:8123",
+        "http://10.1.0.2:8123"
+    ],
+    "username": "",
+    "password": "",
+    "tasks": [
+        {
+            "task_name": "task1",
+            "queries": [
+                "query1",
+                "query2"
+            ],
+            "task_interval": "10m"
+        },
+        {
+            "task_name": "task2",
+            "queries": [
+                "query1",
+                "query2",
+                "query3"
+            ],
+            "task_interval": "1h"
+        }
+    ]
+}

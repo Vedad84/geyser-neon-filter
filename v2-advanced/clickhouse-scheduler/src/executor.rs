@@ -12,23 +12,25 @@ use crate::client::ClickHouse;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
-    pub server: String,
+    pub log_path: String,
+    pub servers: Vec<String>,
     pub username: String,
     pub password: String,
     pub tasks: TaskList,
-    pub log_path: String,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct Task {
     task_name: String,
-    cron_time: String,
+    _queries: Vec<String>,
+    task_interval: String,
 }
 
 pub type TaskList = Vec<Task>;
 
-async fn execute_task(_client: Client, task: Task, shutdown: Arc<Notify>) {
-    let duration = parse_duration(&task.cron_time).expect("Unable to parse cron_time as duration");
+async fn execute_task(_clients: Arc<Vec<Client>>, task: Task, shutdown: Arc<Notify>) {
+    let duration =
+        parse_duration(&task.task_interval).expect("Unable to parse cron_time as duration");
     let mut task_interval = interval(duration);
 
     loop {
@@ -47,12 +49,12 @@ async fn execute_task(_client: Client, task: Task, shutdown: Arc<Notify>) {
 pub async fn start_tasks(config: Config, shutdown: Arc<Notify>) {
     let mut set = JoinSet::new();
 
-    let client = ClickHouse::from_config(&config);
+    let clients = Arc::new(ClickHouse::from_config(&config));
 
     for task in config.tasks.into_iter() {
-        let client = client.clone();
+        let clients = clients.clone();
         let task_shutdown = shutdown.clone();
-        set.spawn(async move { execute_task(client, task, task_shutdown).await });
+        set.spawn(async move { execute_task(clients, task, task_shutdown).await });
     }
 
     while let Some(_res) = set.join_next().await {}
