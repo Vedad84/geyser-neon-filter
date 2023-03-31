@@ -148,12 +148,9 @@ pub async fn db_stmt_executor<M, F>(
 
                 let client = loop {
                     select! {
-                        _ = sigterm_rx.changed() => {
-                            idle_interval.tick().await;
-                            break None;
-                        },
+                        _ = sigterm_rx.changed() => return,
                         db_pool_result = db_pool.get() => match db_pool_result {
-                            Ok(client) => break Some(Arc::new(client)),
+                            Ok(client) => break Arc::new(client),
                             Err(err) => {
                                 error!("Failed to get a client from the pool, error: {err:?}");
                                 idle_interval.tick().await;
@@ -162,20 +159,18 @@ pub async fn db_stmt_executor<M, F>(
                     };
                 };
 
-                if let Some(client) = client {
-                    tokio::spawn(
-                        process_message(
-                            client,
-                            topic.clone(),
-                            (message, offset),
-                            offsets_tx.clone(),
-                            sigterm_rx.clone(),
-                            Arc::clone(&stats),
-                            RAIICounter::new(&stats.processing_tokio_tasks),
-                            process_msg_async,
-                        ),
-                    );
-                }
+                tokio::spawn(
+                    process_message(
+                        client,
+                        topic.clone(),
+                        (message, offset),
+                        offsets_tx.clone(),
+                        sigterm_rx.clone(),
+                        Arc::clone(&stats),
+                        RAIICounter::new(&stats.processing_tokio_tasks),
+                        process_msg_async,
+                    ),
+                );
             }
             Err(_) => {
                 info!("DB statements executor for topic: `{topic}` is shut down");
