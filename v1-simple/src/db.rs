@@ -138,51 +138,39 @@ pub async fn db_stmt_executor<M, F>(
     tokio::spawn(offset_manager_service(topic.clone(), Arc::clone(&consumer), offsets_rx));
 
     let mut idle_interval = tokio::time::interval(Duration::from_millis(50));
-    loop {
-        match queue_rx.recv_async().await {
-            Ok((message, offset)) => {
-                queue_len_gauge.set(queue_rx.len() as f64);
-                if let Err(err) = offsets_tx.send_async(OffsetManagerCommand::StartProcessing(offset.clone())).await {
-                    error!("Unable to send offset being processed for topic `{topic}`. Offset manager service down? Error: {err}");
-                }
-
-                let client = loop {
-                    select! {
-                        _ = sigterm_rx.changed() => {
-                            idle_interval.tick().await;
-                            break None;
-                        },
-                        db_pool_result = db_pool.get() => match db_pool_result {
-                            Ok(client) => break Some(Arc::new(client)),
-                            Err(err) => {
-                                error!("Failed to get a client from the pool, error: {err:?}");
-                                idle_interval.tick().await;
-                            },
-                        },
-                    };
-                };
-
-                if let Some(client) = client {
-                    tokio::spawn(
-                        process_message(
-                            client,
-                            topic.clone(),
-                            (message, offset),
-                            offsets_tx.clone(),
-                            sigterm_rx.clone(),
-                            Arc::clone(&stats),
-                            RAIICounter::new(&stats.processing_tokio_tasks),
-                            process_msg_async,
-                        ),
-                    );
-                }
-            }
-            Err(_) => {
-                info!("DB statements executor for topic: `{topic}` is shut down");
-                return
-            }
+    'main: while let Ok((message, offset)) = queue_rx.recv_async().await {
+        queue_len_gauge.set(queue_rx.len() as f64);
+        if let Err(err) = offsets_tx.send_async(OffsetManagerCommand::StartProcessing(offset.clone())).await {
+            error!("Unable to send offset being processed for topic `{topic}`. Offset manager service down? Error: {err}");
         }
+
+        let client = loop {
+            select! {
+                _ = sigterm_rx.changed() => break 'main,
+                db_pool_result = db_pool.get() => match db_pool_result {
+                    Ok(client) => break Arc::new(client),
+                    Err(err) => {
+                        error!("Failed to get a client from the pool, error: {err:?}");
+                        idle_interval.tick().await;
+                    },
+                },
+            };
+        };
+
+        tokio::spawn(
+            process_message(
+                client,
+                topic.clone(),
+                (message, offset),
+                offsets_tx.clone(),
+                sigterm_rx.clone(),
+                Arc::clone(&stats),
+                RAIICounter::new(&stats.processing_tokio_tasks),
+                process_msg_async,
+            ),
+        );
     }
+    info!("DB statements executor for topic: `{topic}` is shut down");
 }
 
 #[allow(clippy::too_many_arguments)]
