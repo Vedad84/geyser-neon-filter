@@ -165,7 +165,6 @@ pub async fn run_consumer<T, S>(
 {
     info!("The consumer loop for topic `{topic}` is about to start");
 
-    let mut position_was_printed = false;
     loop {
         let msg_result: Result<_, _> = select! {
             _ = sigterm_rx.changed() => break,
@@ -174,10 +173,6 @@ pub async fn run_consumer<T, S>(
 
         match msg_result {
             Ok(message) => {
-                if !position_was_printed {
-                    info!("Consumer for topic: `{topic}` initial position: {:?}", consumer.position().unwrap());
-                    position_was_printed = true;
-                }
                 process_message(
                     Arc::clone(&filter_config),
                     message,
