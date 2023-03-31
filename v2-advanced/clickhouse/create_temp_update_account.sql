@@ -73,7 +73,7 @@ AS  SELECT pubkey,
            retrieved_time
 FROM events.temp_update_account_queue;
 
-CREATE TABLE IF NOT EXISTS events.items_to_move (
+CREATE TABLE IF NOT EXISTS events.items_to_move ON CLUSTER '{cluster}' (
     pubkey Array(UInt8),
     lamports UInt64,
     owner Array(UInt8),
