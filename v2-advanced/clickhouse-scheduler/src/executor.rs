@@ -5,38 +5,16 @@ use tokio::sync::Notify;
 use tokio::task::JoinSet;
 use tokio::time::interval;
 
-use humantime::parse_duration;
-use serde::Deserialize;
-
 use crate::client::ClickHouse;
-
-#[derive(Debug, Deserialize)]
-pub struct Config {
-    pub log_path: String,
-    pub servers: Vec<String>,
-    pub username: String,
-    pub password: String,
-    pub tasks: TaskList,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct Task {
-    task_name: String,
-    _queries: Vec<String>,
-    task_interval: String,
-}
-
-pub type TaskList = Vec<Task>;
+use crate::config::{Config, Task};
 
 async fn execute_task(_clients: Arc<Vec<Client>>, task: Task, shutdown: Arc<Notify>) {
-    let duration =
-        parse_duration(&task.task_interval).expect("Unable to parse cron_time as duration");
-    let mut task_interval = interval(duration);
+    let mut task_interval = interval(task.task_interval);
 
     loop {
         tokio::select! {
             _ = task_interval.tick() => {
-                info!("Executing task: {}", task.task_name);
+                info!("Executing task: {}, with interval {:#?}", task.task_name, task.task_interval);
             }
             _ = shutdown.notified() => {
                 info!("Shutting down task: {}", task.task_name);

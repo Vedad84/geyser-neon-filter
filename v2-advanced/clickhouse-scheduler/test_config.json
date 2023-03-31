@@ -1,4 +1,11 @@
 {
+    "http_settings": {
+        "connect_timeout": "5s",
+        "keepalive": "60s",
+        "pool_idle_timeout": "5s",
+        "no_delay": true,
+        "reuse_address": true
+    },
     "log_path": "/var/log/neon/scheduler.log",
     "servers": [
         "http://10.1.0.2:8123",
@@ -8,7 +15,7 @@
     "password": "",
     "tasks": [
         {
-            "task_name": "task1",
+            "task_name": "Two queries",
             "queries": [
                 "query1",
                 "query2"
@@ -16,13 +23,13 @@
             "task_interval": "10m"
         },
         {
-            "task_name": "task2",
+            "task_name": "Three queries",
             "queries": [
                 "query1",
                 "query2",
                 "query3"
             ],
-            "task_interval": "1h"
+            "task_interval": "10s"
         }
     ]
 }

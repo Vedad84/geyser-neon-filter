@@ -1,10 +1,12 @@
 mod client;
+mod config;
 mod executor;
 
 use std::sync::Arc;
 
 use clap::{Arg, Command};
-use executor::{start_tasks, Config};
+use config::Config;
+use executor::start_tasks;
 use fast_log::consts::LogSize;
 use fast_log::plugin::file_split::RollingType;
 use fast_log::plugin::packer::LogPacker;
@@ -27,7 +29,7 @@ async fn main() {
         .version("1.0")
         .about("Neonlabs clickhouse scheduler utility")
         .arg(
-            Arg::new("c")
+            Arg::new("config")
                 .short('c')
                 .required(true)
                 .long("config")
@@ -61,7 +63,7 @@ async fn main() {
         let mut signal =
             signal(SignalKind::terminate()).expect("Unable to register SIGTERM handler");
         signal.recv().await;
-        shutdown_signal.notify_one();
+        shutdown_signal.notify_waiters();
     });
 
     start_tasks(config, shutdown).await;
