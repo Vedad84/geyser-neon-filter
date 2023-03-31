@@ -3,6 +3,7 @@
    <profiles>
        <default>
            <date_time_input_format>best_effort</date_time_input_format>
+           <allow_nondeterministic_mutations>1</allow_nondeterministic_mutations>
        </default>
    </profiles>
 </clickhouse>
