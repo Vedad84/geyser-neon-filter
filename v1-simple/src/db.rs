@@ -128,6 +128,7 @@ pub async fn db_stmt_executor<M, F>(
     queue_rx: Receiver<QueueMsg<M>>,
     queue_len_gauge: Gauge<f64, AtomicU64>,
     sigterm_rx: watch::Receiver<()>,
+    max_db_executor_tasks: usize,
     process_msg_async: fn (Arc<Client>, Arc<M>) -> F,
 ) where
     M: Send + Sync + 'static,
@@ -143,7 +144,7 @@ pub async fn db_stmt_executor<M, F>(
             error!("Unable to send offset being processed for topic `{topic}`. Offset manager service down? Error: {err}");
         }
 
-        while db_pool.status().available < 5 || stats.processing_tokio_tasks.get() > 2000.0 {
+        while stats.processing_tokio_tasks.get() > max_db_executor_tasks as f64 {
             tokio::task::yield_now().await;
         }
 

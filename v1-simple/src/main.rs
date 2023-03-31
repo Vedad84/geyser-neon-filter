@@ -175,6 +175,8 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
         sigterm_rx.clone(),
     ));
 
+    let max_db_executor_tasks = config.max_db_executor_tasks();
+
     let account_db_stmt_executor = tokio::spawn(db_stmt_executor(
         Arc::clone(&consumer_update_account),
         update_account_topic.clone(),
@@ -183,6 +185,7 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
         account_rx,
         ctx_stats.stats.queue_len_update_account.clone(),
         sigterm_rx.clone(),
+        max_db_executor_tasks,
         exec_account_statement,
     ));
 
@@ -194,6 +197,7 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
         slot_rx,
         ctx_stats.stats.queue_len_update_slot.clone(),
         sigterm_rx.clone(),
+        max_db_executor_tasks,
         exec_slot_statement,
     ));
 
@@ -205,6 +209,7 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
         transaction_rx,
         ctx_stats.stats.queue_len_notify_transaction.clone(),
         sigterm_rx.clone(),
+        max_db_executor_tasks,
         exec_transaction_statement,
     ));
 
@@ -216,6 +221,7 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
         block_rx,
         ctx_stats.stats.queue_len_notify_block.clone(),
         sigterm_rx.clone(),
+        max_db_executor_tasks,
         exec_block_statement,
     ));
 
