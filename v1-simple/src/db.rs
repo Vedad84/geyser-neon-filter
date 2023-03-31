@@ -143,7 +143,7 @@ pub async fn db_stmt_executor<M, F>(
             error!("Unable to send offset being processed for topic `{topic}`. Offset manager service down? Error: {err}");
         }
 
-        while db_pool.status().available == 0 {
+        while db_pool.status().available < 5 {
             tokio::task::yield_now().await;
         }
 
