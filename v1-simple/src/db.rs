@@ -171,7 +171,7 @@ pub async fn db_stmt_executor<M, F>(
         );
     }
 
-    info!("DB statements executor for topic: `{topic}` is shut down");
+    info!("DB statements executor for topic: `{topic}` has shut down");
 }
 
 #[allow(clippy::too_many_arguments)]

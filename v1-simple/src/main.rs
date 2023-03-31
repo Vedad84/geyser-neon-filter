@@ -232,7 +232,7 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
         cfg_watcher,
     );
 
-    info!("Gracefully shut down");
+    info!("All services have shut down");
 
     logger.flush()
 }

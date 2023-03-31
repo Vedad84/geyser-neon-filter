@@ -213,7 +213,7 @@ pub async fn offset_manager_service(
         }
     }
 
-    info!("Offset manager service shut down");
+    info!("Offset manager service has shut down");
 }
 
 #[cfg(test)]

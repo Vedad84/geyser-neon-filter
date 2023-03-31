@@ -135,7 +135,7 @@ pub async fn async_watch(
         }
     }
 
-    info!("Config watcher is shut down");
+    info!("Config watcher has shut down");
 
     Ok(())
 }

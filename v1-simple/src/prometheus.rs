@@ -164,7 +164,7 @@ async fn start_metrics_server(metrics_addr: SocketAddr, registry: Registry, mut 
         .await
         .expect("Failed to bind hyper server with graceful_shutdown");
 
-    info!("Metrics server is shut down");
+    info!("Metrics server has shut down");
 }
 
 fn make_handler(
