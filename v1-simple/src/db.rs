@@ -22,7 +22,7 @@ use tokio_postgres::NoTls;
 
 use crate::app_config::AppConfig;
 use crate::consumer::QueueMsg;
-use crate::consumer_stats::{ContextWithStats, Stats};
+use crate::consumer_stats::{ContextWithStats, RAIICounter, Stats};
 
 use crate::db_inserts::insert_into_account_audit;
 use crate::db_inserts::insert_into_block_metadata;
@@ -153,6 +153,7 @@ pub async fn db_stmt_executor<M, F>(
                         offsets_tx.clone(),
                         sigterm_rx.clone(),
                         Arc::clone(&stats),
+                        RAIICounter::new(&stats.processing_tokio_tasks),
                         process_msg_async,
                     ),
                 );
@@ -172,6 +173,8 @@ async fn process_message<M, F>(
     offsets_tx: Sender<OffsetManagerCommand>,
     mut sigterm_rx: watch::Receiver<()>,
     stats: Arc<Stats>,
+    // Don't remove this field, it tracks number of tasks, scheduled for execution
+    _tasks_raii_counter: RAIICounter<f64, AtomicU64>,
     process_msg_async: impl Fn(Arc<Client>, Arc<M>) -> F,
 ) where
     F: Future<Output = Result<u64>>,

@@ -53,6 +53,12 @@ pub async fn start_prometheus(
     );
 
     registry.register(
+        "processing_tokio_tasks",
+        "How many tasks currently spawned and not finished yet",
+        stats.processing_tokio_tasks.clone(),
+    );
+
+    registry.register(
         "db_errors",
         "How many database errors occurred",
         stats.db_errors.clone(),
