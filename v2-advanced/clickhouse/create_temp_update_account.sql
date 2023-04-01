@@ -86,3 +86,7 @@ CREATE TABLE IF NOT EXISTS events.items_to_move ON CLUSTER '{cluster}' (
     is_startup Bool,
     retrieved_time DateTime64
 ) ENGINE = Memory;
+
+--SELECT base58Encode(arrayStringConcat(arrayMap(x -> char(x), pubkey), '')), slot, write_version
+--FROM events.items_to_move
+--ORDER BY pubkey, slot, write_version;
