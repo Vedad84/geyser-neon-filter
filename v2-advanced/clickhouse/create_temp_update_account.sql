@@ -73,7 +73,7 @@ AS  SELECT pubkey,
            retrieved_time
 FROM events.temp_update_account_queue;
 
-CREATE TABLE IF NOT EXISTS events.items_to_move ON CLUSTER '{cluster}' (
+CREATE TABLE IF NOT EXISTS events.items_to_order ON CLUSTER '{cluster}' (
     pubkey Array(UInt8),
     lamports UInt64,
     owner Array(UInt8),
@@ -88,5 +88,5 @@ CREATE TABLE IF NOT EXISTS events.items_to_move ON CLUSTER '{cluster}' (
 ) ENGINE = Memory;
 
 --SELECT base58Encode(arrayStringConcat(arrayMap(x -> char(x), pubkey), '')), slot, write_version
---FROM events.items_to_move
+--FROM events.items_to_order
 --ORDER BY pubkey, slot, write_version;

@@ -1,4 +1,4 @@
-INSERT INTO events.items_to_move
+INSERT INTO events.items_to_order
 SELECT
     tual.pubkey,
     tual.lamports,
@@ -19,7 +19,7 @@ WHERE (tual.txn_signature, tual.slot, tual.pubkey) NOT IN (
 );
 
 
-INSERT INTO events.items_to_move
+INSERT INTO events.items_to_order
 SELECT
     tual.pubkey,
     tual.lamports,
@@ -40,11 +40,11 @@ WHERE
     );
 
 INSERT INTO events.update_account_local
-SELECT * FROM events.items_to_move;
+SELECT * FROM events.items_to_order;
 
 INSERT INTO events.temp_update_account_processed_local (
     pubkey, txn_signature, slot
 )
-SELECT itm.pubkey, itm.txn_signature, itm.slot FROM events.items_to_move itm;
+SELECT itm.pubkey, itm.txn_signature, itm.slot FROM events.items_to_order itm;
 
-TRUNCATE TABLE events.items_to_move;
+TRUNCATE TABLE events.items_to_order;
