@@ -150,6 +150,8 @@ pub fn env_build_config() -> (AppConfig, FilterConfig) {
 
     let filter_config_path = env::var("FILTER_CONFIG_PATH").expect("FILTER_CONFIG_PATH is not set");
 
+    let max_db_executor_tasks = env::var("MAX_DB_EXECUTOR_TASKS").expect("MAX_DB_EXECUTOR_TASKS is not set");
+
     let cfg = AppConfig {
         filter_log_path,
         bootstrap_servers,
@@ -183,6 +185,7 @@ pub fn env_build_config() -> (AppConfig, FilterConfig) {
         kafka_log_level,
         global_log_level,
         filter_config_path,
+        max_db_executor_tasks,
     };
 
     let filter_cfg = FilterConfig {
@@ -227,6 +230,7 @@ pub struct AppConfig {
     pub kafka_log_level: LogLevel,
     pub global_log_level: GlobalLogLevel,
     pub filter_config_path: String,
+    pub max_db_executor_tasks: String,
 }
 
 impl AppConfig {
@@ -252,5 +256,11 @@ impl AppConfig {
         self.notify_block_queue_capacity
             .parse()
             .expect("NOTIFY_BLOCK_QUEUE_CAPACITY is not a number")
+    }
+
+    pub fn max_db_executor_tasks(&self) -> usize {
+        self.max_db_executor_tasks
+            .parse()
+            .expect("MAX_DB_EXECUTOR_TASKS is not a number")
     }
 }
