@@ -1,8 +1,9 @@
-use std::sync::{atomic::AtomicU64, Arc};
+use std::sync::{Arc, atomic::AtomicU64};
 
 use log::info;
 use prometheus_client::metrics::{counter::Counter, gauge::Gauge};
-use rdkafka::{consumer::ConsumerContext, ClientContext, Statistics};
+use prometheus_client::metrics::gauge::Atomic;
+use rdkafka::{ClientContext, consumer::ConsumerContext, Statistics};
 
 #[derive(Default)]
 pub struct Stats {
@@ -18,6 +19,7 @@ pub struct Stats {
     pub queue_len_update_slot: Gauge<f64, AtomicU64>,
     pub queue_len_notify_transaction: Gauge<f64, AtomicU64>,
     pub queue_len_notify_block: Gauge<f64, AtomicU64>,
+    pub processing_tokio_tasks: Gauge<f64, AtomicU64>,
     pub db_errors: Counter<u64, AtomicU64>,
 }
 
@@ -37,3 +39,20 @@ impl ClientContext for ContextWithStats {
 }
 
 impl ConsumerContext for ContextWithStats {}
+
+pub struct RAIICounter<N, A: Atomic<N>> {
+    gauge: Gauge<N, A>
+}
+
+impl<N, A: Atomic<N>> RAIICounter<N, A> {
+    pub fn new(gauge: &Gauge<N, A>) -> Self {
+        gauge.inc();
+        Self { gauge: gauge.clone() }
+    }
+}
+
+impl<N, A: Atomic<N>> Drop for RAIICounter<N, A> {
+    fn drop(&mut self) {
+        self.gauge.dec();
+    }
+}
