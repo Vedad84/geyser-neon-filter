@@ -40,7 +40,8 @@ An example of application configuration file looks like the following:
     "prometheus_port": "9090",
     "kafka_log_level": "Info",
     "global_log_level": "Info",
-    "filter_config_path": "/opt/geyser/filter_config.json"
+    "filter_config_path": "/opt/geyser/filter_config.json",
+    "max_db_executor_tasks": "2000"
 }
 ```
 Filter config configured like this:
@@ -82,6 +83,7 @@ PROMETHEUS_PORT="9090"
 KAFKA_LOG_LEVEL="Info"
 GLOBAL_LOG_LEVEL="Info"
 FILTER_CONFIG_PATH="/opt/geyser/filter_config.json"
+MAX_DB_EXECUTOR_TASKS="2000"
 ```
 
 ## Geyser neon filter V2 (Experimental)
