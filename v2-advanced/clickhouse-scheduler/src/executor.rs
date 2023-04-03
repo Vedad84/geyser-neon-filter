@@ -1,10 +1,14 @@
 use anyhow::Result;
 use clickhouse::Client;
-use log::{info, error};
-use tokio::sync::watch::Receiver;
+use log::{error, info};
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::time::Duration;
+use tokio::sync::watch::Receiver;
 use tokio::task::JoinSet;
 use tokio::time::interval;
+use tryhard::backoff_strategies::BackoffStrategy;
+use tryhard::RetryPolicy;
 
 use crate::client::ClickHouse;
 use crate::config::{Config, Task};
@@ -22,6 +26,24 @@ async fn execute_queries(client: &Client, task: &Task) -> Result<()> {
     Ok(())
 }
 
+#[derive(Debug, Clone)]
+pub struct ShutdownBackoff {
+    pub(crate) delay: Duration,
+    pub(crate) should_stop: Arc<AtomicBool>,
+}
+
+impl<'a, E> BackoffStrategy<'a, E> for ShutdownBackoff {
+    type Output = RetryPolicy;
+
+    #[inline]
+    fn delay(&mut self, _attempt: u32, _error: &'a E) -> RetryPolicy {
+        if self.should_stop.load(std::sync::atomic::Ordering::Relaxed) {
+            return RetryPolicy::Break;
+        }
+        RetryPolicy::Delay(self.delay)
+    }
+}
+
 async fn execute_task(
     config: Arc<Config>,
     clients: Arc<Vec<Client>>,
@@ -31,6 +53,11 @@ async fn execute_task(
     let mut task_interval = interval(task.task_interval);
     let retries = config.http_settings.retries;
     let backoff = config.http_settings.backoff;
+    let should_stop = Arc::new(AtomicBool::new(false));
+    let shutdown_backoff = ShutdownBackoff {
+        delay: backoff,
+        should_stop: should_stop.clone(),
+    };
 
     loop {
         tokio::select! {
@@ -40,9 +67,9 @@ async fn execute_task(
                 for client in clients.iter() {
                     let retry_fn = tryhard::retry_fn(|| execute_queries(client, &task))
                                    .retries(retries)
-                                   .fixed_backoff(backoff);
+                                   .custom_backoff(shutdown_backoff.clone());
 
-                    if let Err(_) = retry_fn.await {
+                    if retry_fn.await.is_err() {
                         error!("Error executing task {}, {} retries", task.task_name,retries);
                         continue;
                     }
@@ -51,6 +78,7 @@ async fn execute_task(
             }
             _ = shutdown.changed() => {
                 info!("Shutting down task: {}", task.task_name);
+                should_stop.store(true, std::sync::atomic::Ordering::Relaxed);
                 break;
             }
         }

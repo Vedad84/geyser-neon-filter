@@ -15,7 +15,7 @@ use tokio::fs::File;
 use tokio::io::AsyncReadExt;
 use tokio::signal::unix::{signal, SignalKind};
 
-use log::{Log, info};
+use log::{info, Log};
 
 async fn read_file_to_string(path: &str) -> Result<String, std::io::Error> {
     let mut file = File::open(path).await?;
