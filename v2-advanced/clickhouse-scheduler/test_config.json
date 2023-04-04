@@ -6,7 +6,7 @@
         "no_delay": true,
         "reuse_address": true,
         "retries": 3,
-        "backoff": "1s"
+        "retry_delay": "1s"
     },
     "log_level": "Info",
     "log_path": "/var/log/neon/scheduler.log",

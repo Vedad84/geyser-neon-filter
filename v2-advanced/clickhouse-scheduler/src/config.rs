@@ -15,7 +15,7 @@ pub struct HTTPSettings {
     pub reuse_address: bool,
     pub retries: u32,
     #[serde(with = "humantime_serde")]
-    pub backoff: Duration,
+    pub retry_delay: Duration,
 }
 
 pub type TaskList = Vec<Task>;
