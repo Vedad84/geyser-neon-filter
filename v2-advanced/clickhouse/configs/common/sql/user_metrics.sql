@@ -1,0 +1,1 @@
+CREATE USER IF NOT EXISTS metrics HOST ANY IDENTIFIED WITH sha256_password BY 'ChangeMe_ghsP2!' SETTINGS readonly=1
