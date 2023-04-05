@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS events.older_account_local ON CLUSTER '{cluster}' (
     '{replica}'
 ) PRIMARY KEY (pubkey, slot, write_version)
 ORDER BY (pubkey, slot, write_version)
+PARTITION BY (retention_counter)
 SETTINGS index_granularity=8192;
 
 
