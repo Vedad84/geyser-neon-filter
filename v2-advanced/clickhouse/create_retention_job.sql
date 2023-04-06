@@ -49,3 +49,14 @@ ORDER BY oal.pubkey DESC, oal.slot DESC, oal.write_version DESC;
 -- STEP 5: INSERT
 INSERT INTO events.older_account_local
 SELECT * FROM events.items_to_retention;
+
+-----------------------------------------------------------------------------------------------
+-- STEP 6: DELETE PREV STATES
+
+CREATE FUNCTION IF NOT EXISTS get_older_account_part_to_drop ON CLUSTER 'events' AS ()->(
+    SELECT MAX(retention_counter) - 1
+    FROM events.older_account_local
+    LIMIT 1
+);
+
+ALTER TABLE events.older_account_local DROP PARTITION tuple(get_older_account_part_to_drop())
