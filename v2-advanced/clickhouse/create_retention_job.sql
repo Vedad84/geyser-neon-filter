@@ -25,7 +25,7 @@ WHERE
 ORDER BY ual.pubkey DESC, ual.slot DESC, ual.write_version DESC;
 
 -----------------------------------------------------------------------------------------------
--- STEP 4: COMPLETE FROM OLDER STATE
+-- STEP 3: COMPLETE FROM OLDER STATE
 INSERT INTO events.items_to_retention
 SELECT DISTINCT ON (oal.pubkey)
     oal.pubkey,
@@ -46,9 +46,13 @@ WHERE
 ORDER BY oal.pubkey DESC, oal.slot DESC, oal.write_version DESC;
 
 -----------------------------------------------------------------------------------------------
--- STEP 5: INSERT
+-- STEP 4: INSERT
 INSERT INTO events.older_account_local
 SELECT * FROM events.items_to_retention;
+
+-----------------------------------------------------------------------------------------------
+-- STEP 5: DELETE OUTDATED ACCOUNT PARTITION
+-- TODO
 
 -----------------------------------------------------------------------------------------------
 -- STEP 6: DELETE PREV STATES
