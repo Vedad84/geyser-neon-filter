@@ -13,12 +13,12 @@ CREATE TABLE IF NOT EXISTS events.older_account_local ON CLUSTER '{cluster}' (
     is_startup Bool CODEC(ZSTD),
     retrieved_time DateTime64 CODEC(DoubleDelta, ZSTD),
     retention_counter UInt64 CODEC(DoubleDelta, ZSTD)
-) ENGINE = ReplicatedMergeTree(
+) ENGINE = ReplicatedReplacingMergeTree(
     '/clickhouse/tables/{shard}/older_account_local',
-    '{replica}'
-) PRIMARY KEY (pubkey, slot, write_version)
-ORDER BY (pubkey, slot, write_version)
-PARTITION BY (retention_counter)
+    '{replica}',
+    retention_counter
+) PRIMARY KEY (pubkey)
+ORDER BY (pubkey)
 SETTINGS index_granularity=8192;
 
 

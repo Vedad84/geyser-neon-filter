@@ -1,10 +1,4 @@
------------------------------------------------------------------------------------------------
--- STEP 1: TRUNCATE TEMPORARY TABLE
-TRUNCATE TABLE events.items_to_retention;
-
------------------------------------------------------------------------------------------------
--- STEP 2: SELECT FROM OUTDATED PARTITION
-INSERT INTO events.items_to_retention
+INSERT INTO events.older_account_local
 SELECT DISTINCT ON (ual.pubkey)
     ual.pubkey,
     ual.lamports,
@@ -21,46 +15,7 @@ SELECT DISTINCT ON (ual.pubkey)
 FROM events.update_account_local ual
 WHERE
     ual.slot > (SELECT MAX(oal.slot) FROM events.older_account_distributed oal)
-    AND ual.slot <= (SELECT MAX(usd.slot) - 6480000 FROM events.update_slot_distributed usd)
+    AND ual.slot <= 197499000
 ORDER BY ual.pubkey DESC, ual.slot DESC, ual.write_version DESC;
 
------------------------------------------------------------------------------------------------
--- STEP 3: COMPLETE FROM OLDER STATE
-INSERT INTO events.items_to_retention
-SELECT DISTINCT ON (oal.pubkey)
-    oal.pubkey,
-    oal.lamports,
-    oal.owner,
-    oal.executable,
-    oal.rent_epoch,
-    oal.`data`,
-    oal.write_version,
-    oal.txn_signature,
-    oal.slot,
-    oal.is_startup,
-    oal.retrieved_time,
-    (SELECT MAX(oal.retention_counter) + 1 FROM events.older_account_local oal)
-FROM events.older_account_local oal
-WHERE
-    oal.pubkey NOT IN (SELECT pubkey FROM events.items_to_retention itr)
-ORDER BY oal.pubkey DESC, oal.slot DESC, oal.write_version DESC;
-
------------------------------------------------------------------------------------------------
--- STEP 4: INSERT
-INSERT INTO events.older_account_local
-SELECT * FROM events.items_to_retention;
-
------------------------------------------------------------------------------------------------
--- STEP 5: DELETE OUTDATED ACCOUNT PARTITION
--- TODO
-
------------------------------------------------------------------------------------------------
--- STEP 6: DELETE PREV STATES
-
-CREATE FUNCTION IF NOT EXISTS get_older_account_part_to_drop ON CLUSTER 'events' AS ()->(
-    SELECT MAX(retention_counter) - 1
-    FROM events.older_account_local
-    LIMIT 1
-);
-
-ALTER TABLE events.older_account_local DROP PARTITION tuple(get_older_account_part_to_drop())
+OPTIMIZE TABLE events.older_account_local DEDUPLICATE;

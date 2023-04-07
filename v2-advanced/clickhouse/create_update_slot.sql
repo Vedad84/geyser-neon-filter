@@ -8,10 +8,8 @@ CREATE TABLE IF NOT EXISTS events.update_slot_local ON CLUSTER '{cluster}' (
 ) ENGINE = ReplicatedMergeTree(
     '/clickhouse/tables/{shard}/update_slot_local',
     '{replica}'
-) PRIMARY KEY(slot)
-PARTITION BY toYYYYMMDD(retrieved_time)
-ORDER BY (slot)
-TTL toDateTime(retrieved_time) + INTERVAL 60 DAY
+) PRIMARY KEY(slot, retrieved_time)
+ORDER BY (slot, retrieved_time)
 SETTINGS index_granularity=8192;
 
 CREATE TABLE IF NOT EXISTS events.update_slot_distributed ON CLUSTER '{cluster}' AS events.update_slot_local ENGINE = Distributed('{cluster}', events, update_slot_local, rand());
