@@ -9,11 +9,11 @@ use tokio::task::JoinSet;
 use tokio::time::interval;
 use tryhard::backoff_strategies::BackoffStrategy;
 use tryhard::RetryPolicy;
-use prometheus_client::metrics::counter::Counter;
-use std::sync::atomic::AtomicU64;
+use std::time::SystemTime;
 
 use crate::client::ClickHouse;
 use crate::config::{Config, Task};
+use crate::prometheus::TaskMetric;
 
 async fn execute_queries(client: &Client, task: &Task) -> Result<()> {
     for q in task.queries.iter() {
@@ -47,7 +47,7 @@ async fn execute_task(
     clients: Arc<Vec<Client>>,
     task: Task,
     mut shutdown: Receiver<()>,
-    counter: Counter<u64, AtomicU64>,
+    metric: TaskMetric,
 ) {
     let mut task_interval = interval(task.task_interval);
     let retries = config.http_settings.retries;
@@ -61,7 +61,7 @@ async fn execute_task(
     loop {
         tokio::select! {
             _ = task_interval.tick() => {
-                execute_interval(&clients, &task, retries, &shutdown_backoff, shutdown.clone(), counter.clone()).await;
+                execute_interval(&clients, &task, retries, &shutdown_backoff, shutdown.clone(), metric.clone()).await;
             }
             _ = shutdown.changed() => {
                 info!("Shutting down task: {}", task.task_name);
@@ -78,13 +78,15 @@ async fn execute_interval(
     retries: u32,
     shutdown_backoff: &ShutdownBackoff,
     shutdown: Receiver<()>,
-    counter: Counter<u64, AtomicU64>,
+    metric: TaskMetric,
 ) {
     info!(
         "Executing task: {}, with interval {:#?}",
         task.task_name, task.task_interval
     );
 
+    let time_start = SystemTime::now();
+    let mut success = false;
     for client in clients.iter() {
         if execute_with_retry(client, task, retries, shutdown_backoff, shutdown.clone())
             .await
@@ -94,10 +96,29 @@ async fn execute_interval(
                 "Error executing task {}, {} retries",
                 task.task_name, retries
             );
+            metric.errors.inc();
             continue;
         }
-        counter.inc();
+        success = true;
         break;
+    }
+
+    if success {
+        let time_finish = SystemTime::now();
+        let time = time_finish.duration_since(time_start).unwrap_or(Duration::default());
+
+        let time = time.as_secs_f64();
+
+        metric.last_time.set(time);
+
+        let min = metric.min_time.get();
+        if min == f64::default() {
+            metric.min_time.set(time);
+        }
+        metric.min_time.set(min.min(time));
+
+        let max = metric.max_time.get();
+        metric.max_time.set(max.max(time));
     }
 }
 
@@ -118,18 +139,19 @@ async fn execute_with_retry(
     }
 }
 
-pub async fn start_tasks(config: Arc<Config>, shutdown: Receiver<()>, stat: Vec<Counter<u64, AtomicU64>>  ) {
+pub async fn start_tasks(config: Arc<Config>, shutdown: Receiver<()>, task_metrics: Vec<TaskMetric>  ) {
     let mut set = JoinSet::new();
 
     let clients = Arc::new(ClickHouse::from_config(&config));
     let tasks = config.tasks.clone();
 
-    for (task, counter) in tasks.iter().zip(stat) {
+    for (task, metric) in tasks.iter().zip(task_metrics) {
         let task = task.clone();
+        // let metric = metric.clone();
         let config = Arc::clone(&config);
         let clients = clients.clone();
         let task_shutdown = shutdown.clone();
-        set.spawn(async move { execute_task(config, clients, task, task_shutdown, counter).await });
+        set.spawn(async move { execute_task(config, clients, task, task_shutdown, metric).await });
     }
 
     while let Some(_res) = set.join_next().await {}

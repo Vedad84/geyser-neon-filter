@@ -3,8 +3,7 @@ mod config;
 mod executor;
 mod prometheus;
 
-use std::sync::{Arc, atomic::AtomicU64};
-
+use std::sync::Arc;
 use clap::{Arg, Command};
 use config::Config;
 use executor::start_tasks;
@@ -15,8 +14,7 @@ use fast_log::Logger;
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
 use tokio::signal::unix::{signal, SignalKind};
-use prometheus::start_prometheus;
-use prometheus_client::metrics::counter::Counter;
+use prometheus::{start_prometheus, TaskMetric};
 use log::{info, Log};
 
 
@@ -73,11 +71,11 @@ async fn main() {
     });
 
 
-    let (task_names, statistic) : (Vec<String>, Vec<Counter<u64, AtomicU64>>)  =
+    let (task_names, task_metrics) : (Vec<String>, Vec<TaskMetric>)  =
         config
             .tasks
             .iter()
-            .map(|task| (task.task_name.clone(), Counter::<u64, AtomicU64>::default()))
+            .map(|task| (task.task_name.clone(), TaskMetric::default()))
             .unzip();
 
     let prometheus_port = config
@@ -87,13 +85,11 @@ async fn main() {
 
     let (prometheus_down_tx, prometheus_down_rx) = tokio::sync::oneshot::channel::<()>();
 
-    let statistic_ = statistic.clone();
-    let prometheus_handler = tokio::spawn( async move {
-            start_prometheus(statistic_, task_names, prometheus_port, prometheus_down_rx)
-        }
+    let prometheus_handler = tokio::spawn(
+            start_prometheus(task_metrics.clone(), task_names, prometheus_port, prometheus_down_rx)
     );
 
-    start_tasks(Arc::new(config), shutdown_rx, statistic).await;
+    start_tasks(Arc::new(config), shutdown_rx, task_metrics).await;
 
     prometheus_down_tx.send(()).ok();
     let _ = prometheus_handler.await;

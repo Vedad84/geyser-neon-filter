@@ -3,7 +3,7 @@ use std::{
     io,
     net::{IpAddr, Ipv4Addr, SocketAddr},
     pin::Pin,
-    sync::{Arc, atomic::AtomicU64},
+    sync::{Arc, atomic::{AtomicU64}},
 };
 
 use hyper::{
@@ -11,14 +11,20 @@ use hyper::{
     Body, Request, Response, Server,
 };
 
-use prometheus_client::{encoding::text::encode, registry::Registry, metrics::counter::Counter};
+use prometheus_client::{encoding::text::encode, registry::Registry, metrics::{gauge::Gauge ,counter::Counter}};
 use tokio::sync::oneshot;
 use log::info;
 
-
+#[derive(Default, Clone)]
+pub struct TaskMetric {
+    pub min_time: Gauge<f64, AtomicU64>,
+    pub max_time: Gauge<f64, AtomicU64>,
+    pub last_time: Gauge<f64, AtomicU64>,
+    pub errors: Counter<u64, AtomicU64>,
+}
 
 pub async fn start_prometheus(
-    stat: Vec<Counter<u64, AtomicU64>>,
+    task_metrics: Vec<TaskMetric>,
     task_names: Vec<String>,
     port: u16,
     shutdown_rx: oneshot::Receiver<()>,
@@ -26,9 +32,17 @@ pub async fn start_prometheus(
     let mut registry = <Registry>::default();
 
     task_names.iter()
-        .zip(stat)
-        .for_each(|(task, counter)| {
-            registry.register(task.clone(), task, counter.clone());
+        .zip(task_metrics)
+        .for_each(|(name, metric)| {
+            let min_time_name = format!("{name} min_time");
+            let max_time_name = format!("{name} max_time");
+            let last_time_name = format!("{name} last_time");
+            let errors_name = format!("{name} error counter");
+
+            registry.register(&min_time_name, &min_time_name, metric.min_time.clone());
+            registry.register(&max_time_name, &max_time_name, metric.max_time.clone());
+            registry.register(&last_time_name, &last_time_name, metric.last_time.clone());
+            registry.register(&errors_name, &errors_name, metric.errors.clone());
         });
 
     let metrics_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), port);
