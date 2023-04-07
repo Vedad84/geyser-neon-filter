@@ -9,6 +9,8 @@ use tokio::task::JoinSet;
 use tokio::time::interval;
 use tryhard::backoff_strategies::BackoffStrategy;
 use tryhard::RetryPolicy;
+use prometheus_client::metrics::counter::Counter;
+use std::sync::atomic::AtomicU64;
 
 use crate::client::ClickHouse;
 use crate::config::{Config, Task};
@@ -45,6 +47,7 @@ async fn execute_task(
     clients: Arc<Vec<Client>>,
     task: Task,
     mut shutdown: Receiver<()>,
+    counter: Counter<u64, AtomicU64>,
 ) {
     let mut task_interval = interval(task.task_interval);
     let retries = config.http_settings.retries;
@@ -58,7 +61,7 @@ async fn execute_task(
     loop {
         tokio::select! {
             _ = task_interval.tick() => {
-                execute_interval(&clients, &task, retries, &shutdown_backoff, shutdown.clone()).await;
+                execute_interval(&clients, &task, retries, &shutdown_backoff, shutdown.clone(), counter.clone()).await;
             }
             _ = shutdown.changed() => {
                 info!("Shutting down task: {}", task.task_name);
@@ -75,6 +78,7 @@ async fn execute_interval(
     retries: u32,
     shutdown_backoff: &ShutdownBackoff,
     shutdown: Receiver<()>,
+    counter: Counter<u64, AtomicU64>,
 ) {
     info!(
         "Executing task: {}, with interval {:#?}",
@@ -92,6 +96,7 @@ async fn execute_interval(
             );
             continue;
         }
+        counter.inc();
         break;
     }
 }
@@ -113,17 +118,18 @@ async fn execute_with_retry(
     }
 }
 
-pub async fn start_tasks(config: Arc<Config>, shutdown: Receiver<()>) {
+pub async fn start_tasks(config: Arc<Config>, shutdown: Receiver<()>, stat: Vec<Counter<u64, AtomicU64>>  ) {
     let mut set = JoinSet::new();
 
     let clients = Arc::new(ClickHouse::from_config(&config));
     let tasks = config.tasks.clone();
 
-    for task in tasks {
+    for (task, counter) in tasks.iter().zip(stat) {
+        let task = task.clone();
         let config = Arc::clone(&config);
         let clients = clients.clone();
         let task_shutdown = shutdown.clone();
-        set.spawn(async move { execute_task(config, clients, task, task_shutdown).await });
+        set.spawn(async move { execute_task(config, clients, task, task_shutdown, counter).await });
     }
 
     while let Some(_res) = set.join_next().await {}
