@@ -150,6 +150,92 @@ SELECT 'clickhouse_move' as name,
        'gauge' as type
 FROM system.metrics
 WHERE metric = 'Move'
+---
+UNION ALL
+---
+SELECT 'table_compressed_size_gbytes' AS name,
+    toFloat64(SUM(data_compressed_bytes) / (1024 * 1024 * 1024)) AS value,
+    'Compressed table size in gigabytes' AS help,
+    map('hostname', hostName(), 'table', 'notify_block_local') AS labels,
+    'gauge' AS type
+FROM system.parts
+WHERE active = 1 AND table = 'notify_block_local'
+GROUP BY table
+---
+UNION ALL
+---
+SELECT 'table_uncompressed_size_gbytes' AS name,
+    toFloat64(SUM(data_uncompressed_bytes) / (1024 * 1024 * 1024)) AS value,
+    'Uncompressed table size in gigabytes' AS help,
+    map('hostname', hostName(), 'table', 'notify_block_local') AS labels,
+    'gauge' AS type
+FROM system.parts
+WHERE active = 1 AND table = 'notify_block_local'
+GROUP BY table
+---
+UNION ALL
+---
+SELECT 'table_compressed_size_gbytes' AS name,
+    toFloat64(SUM(data_compressed_bytes) / (1024 * 1024 * 1024)) AS value,
+    'Compressed table size in gigabytes' AS help,
+    map('hostname', hostName(), 'table', 'notify_transaction_local') AS labels,
+    'gauge' AS type
+FROM system.parts
+WHERE active = 1 AND table = 'notify_transaction_local'
+GROUP BY table
+---
+UNION ALL
+---
+SELECT 'table_uncompressed_size_gbytes' AS name,
+    toFloat64(SUM(data_uncompressed_bytes) / (1024 * 1024 * 1024)) AS value,
+    'Uncompressed table size in gigabytes' AS help,
+    map('hostname', hostName(), 'table', 'notify_transaction_local') AS labels,
+    'gauge' AS type
+FROM system.parts
+WHERE active = 1 AND table = 'notify_transaction_local'
+GROUP BY table
+---
+UNION ALL
+---
+SELECT 'table_compressed_size_gbytes' AS name,
+    toFloat64(SUM(data_compressed_bytes) / (1024 * 1024 * 1024)) AS value,
+    'Compressed table size in gigabytes' AS help,
+    map('hostname', hostName(), 'table', 'update_account_local') AS labels,
+    'gauge' AS type
+FROM system.parts
+WHERE active = 1 AND table = 'update_account_local'
+GROUP BY table
+---
+UNION ALL
+---
+SELECT 'table_uncompressed_size_gbytes' AS name,
+    toFloat64(SUM(data_uncompressed_bytes) / (1024 * 1024 * 1024)) AS value,
+    'Uncompressed table size in gigabytes' AS help,
+    map('hostname', hostName(), 'table', 'update_account_local') AS labels,
+    'gauge' AS type
+FROM system.parts
+WHERE active = 1 AND table = 'update_account_local'
+GROUP BY table
+---
+UNION ALL
+---
+SELECT 'table_compressed_size_gbytes' AS name,
+    toFloat64(SUM(data_compressed_bytes) / (1024 * 1024 * 1024)) AS value,
+    'Compressed table size in gigabytes' AS help,
+    map('hostname', hostName(), 'table', 'update_slot_local') AS labels,
+    'gauge' AS type
+FROM system.parts
+WHERE active = 1 AND table = 'update_slot_local'
+GROUP BY table
+---
+UNION ALL
+---
+SELECT 'table_uncompressed_size_gbytes' AS name,
+    toFloat64(SUM(data_uncompressed_bytes) / (1024 * 1024 * 1024)) AS value,
+    'Uncompressed table size in gigabytes' AS help,
+    map('hostname', hostName(), 'table', 'update_slot_local') AS labels,
+    'gauge' AS type
+FROM system.parts
+WHERE active = 1 AND table = 'update_slot_local'
+GROUP BY table
 ORDER BY name ASC;
-
-
