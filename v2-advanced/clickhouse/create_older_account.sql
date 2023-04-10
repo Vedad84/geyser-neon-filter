@@ -24,18 +24,3 @@ SETTINGS index_granularity=8192;
 
 CREATE TABLE IF NOT EXISTS events.older_account_distributed ON CLUSTER '{cluster}' AS events.update_account_local
     ENGINE = Distributed('{cluster}', events, older_account_local, xxHash64(CONCAT(toString(slot), arrayStringConcat(txn_signature,''))));
-
-CREATE TABLE IF NOT EXISTS events.items_to_retention ON CLUSTER '{cluster}' (
-    pubkey Array(UInt8),
-    lamports UInt64,
-    owner Array(UInt8),
-    executable Bool,
-    rent_epoch UInt64,
-    data Array(UInt8),
-    write_version Int64,
-    txn_signature Array(UInt8) DEFAULT [],
-    slot UInt64,
-    is_startup Bool,
-    retrieved_time DateTime64,
-    retention_counter UInt64
-) ENGINE = Memory;
