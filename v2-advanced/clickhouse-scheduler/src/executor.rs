@@ -68,8 +68,8 @@ async fn execute_task(
                     measurement_queue.push_back(execution_time);
                     measurement_queue.pop_front();
                     metric.avg_time.set(measurement_queue.iter().sum::<f64>() / measurement_queue.len() as f64);
-                    metric.min_time.set(measurement_queue.iter().min_by( |a, b| a.total_cmp(b)).unwrap_or(&0_f64).clone());
-                    metric.max_time.set(measurement_queue.iter().max_by( |a, b| a.total_cmp(b)).unwrap_or(&0_f64).clone());
+                    metric.min_time.set(*measurement_queue.iter().min_by( |a, b| a.total_cmp(b)).unwrap_or(&0_f64));
+                    metric.max_time.set(*measurement_queue.iter().max_by( |a, b| a.total_cmp(b)).unwrap_or(&0_f64));
                  }
                 else {
                     metric.errors.inc();
@@ -112,7 +112,7 @@ async fn execute_interval(
         return  Some(execution_time.as_secs_f64());
     }
 
-    return None
+    None
 }
 
 async fn execute_with_retry(
@@ -140,7 +140,6 @@ pub async fn start_tasks(config: Arc<Config>, shutdown: Receiver<()>, task_metri
 
     for (task, metric) in tasks.iter().zip(task_metrics) {
         let task = task.clone();
-        // let metric = metric.clone();
         let config = Arc::clone(&config);
         let clients = clients.clone();
         let task_shutdown = shutdown.clone();

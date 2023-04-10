@@ -42,7 +42,7 @@ pub async fn start_prometheus(
             registry.register(&min_time_name, &min_time_name, metric.min_time.clone());
             registry.register(&max_time_name, &max_time_name, metric.max_time.clone());
             registry.register(&avg_time_name, &avg_time_name, metric.avg_time.clone());
-            registry.register(&errors_name, &errors_name, metric.errors.clone());
+            registry.register(&errors_name, &errors_name, metric.errors);
         });
 
     let metrics_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), port);
