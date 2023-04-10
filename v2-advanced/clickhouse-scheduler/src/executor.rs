@@ -9,7 +9,7 @@ use tokio::task::JoinSet;
 use tokio::time::interval;
 use tryhard::backoff_strategies::BackoffStrategy;
 use tryhard::RetryPolicy;
-use std::time::SystemTime;
+use std::time::Instant;
 
 use crate::client::ClickHouse;
 use crate::config::{Config, Task};
@@ -96,7 +96,7 @@ async fn execute_interval(
         task.task_name, task.task_interval
     );
 
-    let time_start = SystemTime::now();
+    let time_start = Instant::now();
     for client in clients.iter() {
         if execute_with_retry(client, task, retries, shutdown_backoff, shutdown.clone())
             .await
@@ -108,7 +108,7 @@ async fn execute_interval(
             );
             continue;
         }
-        let execution_time = SystemTime::now().duration_since(time_start).unwrap_or(Duration::default());
+        let execution_time = Instant::now().duration_since(time_start);
         return  Some(execution_time.as_secs_f64());
     }
 

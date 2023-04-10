@@ -8,7 +8,7 @@ use std::{
 
 use hyper::{
     service::{make_service_fn, service_fn},
-    Body, Request, Response, Server,
+    Body, Request, Response, server::Server,
 };
 
 use prometheus_client::{encoding::text::encode, registry::Registry, metrics::{gauge::Gauge ,counter::Counter}};
