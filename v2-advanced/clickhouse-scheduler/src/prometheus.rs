@@ -19,7 +19,7 @@ use log::info;
 pub struct TaskMetric {
     pub min_time: Gauge<f64, AtomicU64>,
     pub max_time: Gauge<f64, AtomicU64>,
-    pub last_time: Gauge<f64, AtomicU64>,
+    pub avg_time: Gauge<f64, AtomicU64>,
     pub errors: Counter<u64, AtomicU64>,
 }
 
@@ -36,12 +36,12 @@ pub async fn start_prometheus(
         .for_each(|(name, metric)| {
             let min_time_name = format!("{name} min_time");
             let max_time_name = format!("{name} max_time");
-            let last_time_name = format!("{name} last_time");
+            let avg_time_name = format!("{name} avg_time");
             let errors_name = format!("{name} error counter");
 
             registry.register(&min_time_name, &min_time_name, metric.min_time.clone());
             registry.register(&max_time_name, &max_time_name, metric.max_time.clone());
-            registry.register(&last_time_name, &last_time_name, metric.last_time.clone());
+            registry.register(&avg_time_name, &avg_time_name, metric.avg_time.clone());
             registry.register(&errors_name, &errors_name, metric.errors.clone());
         });
 

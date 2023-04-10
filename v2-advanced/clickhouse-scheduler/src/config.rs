@@ -61,4 +61,5 @@ pub struct Task {
     pub queries: Vec<String>,
     #[serde(with = "humantime_serde")]
     pub task_interval: Duration,
+    pub average_depth: usize,
 }

@@ -14,6 +14,7 @@ use std::time::SystemTime;
 use crate::client::ClickHouse;
 use crate::config::{Config, Task};
 use crate::prometheus::TaskMetric;
+use std::collections::VecDeque;
 
 async fn execute_queries(client: &Client, task: &Task) -> Result<()> {
     for q in task.queries.iter() {
@@ -57,11 +58,22 @@ async fn execute_task(
         retry_delay,
         should_stop: should_stop.clone(),
     };
+    let mut measurement_queue: VecDeque<f64> = VecDeque::from(vec![0_f64; task.average_depth]);
 
     loop {
         tokio::select! {
             _ = task_interval.tick() => {
-                execute_interval(&clients, &task, retries, &shutdown_backoff, shutdown.clone(), metric.clone()).await;
+                let execution_time = execute_interval(&clients, &task, retries, &shutdown_backoff, shutdown.clone()).await;
+                if let Some(execution_time) = execution_time {
+                    measurement_queue.push_back(execution_time);
+                    measurement_queue.pop_front();
+                    metric.avg_time.set(measurement_queue.iter().sum::<f64>() / measurement_queue.len() as f64);
+                    metric.min_time.set(measurement_queue.iter().min_by( |a, b| a.total_cmp(b)).unwrap_or(&0_f64).clone());
+                    metric.max_time.set(measurement_queue.iter().max_by( |a, b| a.total_cmp(b)).unwrap_or(&0_f64).clone());
+                 }
+                else {
+                    metric.errors.inc();
+                }
             }
             _ = shutdown.changed() => {
                 info!("Shutting down task: {}", task.task_name);
@@ -78,15 +90,13 @@ async fn execute_interval(
     retries: u32,
     shutdown_backoff: &ShutdownBackoff,
     shutdown: Receiver<()>,
-    metric: TaskMetric,
-) {
+) -> Option<f64> {
     info!(
         "Executing task: {}, with interval {:#?}",
         task.task_name, task.task_interval
     );
 
     let time_start = SystemTime::now();
-    let mut success = false;
     for client in clients.iter() {
         if execute_with_retry(client, task, retries, shutdown_backoff, shutdown.clone())
             .await
@@ -96,30 +106,13 @@ async fn execute_interval(
                 "Error executing task {}, {} retries",
                 task.task_name, retries
             );
-            metric.errors.inc();
             continue;
         }
-        success = true;
-        break;
+        let execution_time = SystemTime::now().duration_since(time_start).unwrap_or(Duration::default());
+        return  Some(execution_time.as_secs_f64());
     }
 
-    if success {
-        let time_finish = SystemTime::now();
-        let time = time_finish.duration_since(time_start).unwrap_or(Duration::default());
-
-        let time = time.as_secs_f64();
-
-        metric.last_time.set(time);
-
-        let min = metric.min_time.get();
-        if min == f64::default() {
-            metric.min_time.set(time);
-        }
-        metric.min_time.set(min.min(time));
-
-        let max = metric.max_time.get();
-        metric.max_time.set(max.max(time));
-    }
+    return None
 }
 
 async fn execute_with_retry(
