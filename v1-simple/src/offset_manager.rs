@@ -1,6 +1,6 @@
+use ahash::AHashMap;
 use std::cmp::Ordering;
 use std::sync::Arc;
-use ahash::AHashMap;
 
 use flume::Receiver;
 use log::{error, info};
@@ -56,7 +56,7 @@ impl PartitionOffsetManager {
             if self.len == 0 {
                 return self.last_added;
             }
-            return Some(self.offsets[self.start] - 1)
+            return Some(self.offsets[self.start] - 1);
         }
         assert!(self.len > 1);
         let mut last_index = self.absolute_index(self.len - 1);
@@ -83,7 +83,7 @@ impl PartitionOffsetManager {
                     }
                     self.offsets[start_index] = fill_value;
                 }
-            },
+            }
         }
         self.count -= 1;
         None
@@ -132,7 +132,8 @@ impl PartitionOffsetManager {
     fn grow(&mut self) {
         let old_capacity = self.offsets.len();
         self.offsets.resize(self.offsets.len() * 2, 0);
-        self.offsets.copy_within(0..self.len - (old_capacity - self.start - 1), old_capacity);
+        self.offsets
+            .copy_within(0..self.len - (old_capacity - self.start - 1), old_capacity);
     }
 
     #[inline]
@@ -175,22 +176,37 @@ impl OffsetManager {
     const INITIAL_CAPACITY: usize = 1024;
 
     pub fn new(topic: String, consumer: Arc<StreamConsumer<ContextWithStats>>) -> Self {
-        Self { topic, consumer, partitions: AHashMap::new() }
+        Self {
+            topic,
+            consumer,
+            partitions: AHashMap::new(),
+        }
     }
 
     pub fn append(&mut self, offset: &Offset) {
-        self.partitions.entry(offset.partition)
+        self.partitions
+            .entry(offset.partition)
             .or_insert(PartitionOffsetManager::new(Self::INITIAL_CAPACITY))
             .append(offset.offset);
     }
 
     pub fn remove(&mut self, offset: Offset) {
         let Offset { partition, offset } = offset;
-        let partition_manager = self.partitions.get_mut(&partition)
-            .unwrap_or_else(|| panic!("Partition manager for partition {} for topic `{}` not found", partition, self.topic));
+        let partition_manager = self.partitions.get_mut(&partition).unwrap_or_else(|| {
+            panic!(
+                "Partition manager for partition {} for topic `{}` not found",
+                partition, self.topic
+            )
+        });
         if let Some(processed_upto) = partition_manager.remove(offset) {
-            self.consumer.store_offset(&self.topic, partition, processed_upto)
-                .unwrap_or_else(|err| error!("Failed to update offset for topic `{}`. Kafka error: {err}", self.topic));
+            self.consumer
+                .store_offset(&self.topic, partition, processed_upto)
+                .unwrap_or_else(|err| {
+                    error!(
+                        "Failed to update offset for topic `{}`. Kafka error: {err}",
+                        self.topic
+                    )
+                });
         }
     }
 }
@@ -236,7 +252,10 @@ mod tests {
         assert_eq!(offset_manager.len, 19);
         assert_eq!(offset_manager.count, 19);
         assert_eq!(offset_manager.last_added, Some(19));
-        assert_eq!(offset_manager.offsets[0..21], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 0]);
+        assert_eq!(
+            offset_manager.offsets[0..21],
+            [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 0]
+        );
 
         assert_eq!(offset_manager.remove(1), Some(1));
 
@@ -244,7 +263,10 @@ mod tests {
         assert_eq!(offset_manager.len, 18);
         assert_eq!(offset_manager.count, 18);
         assert_eq!(offset_manager.last_added, Some(19));
-        assert_eq!(offset_manager.offsets[0..21], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 0]);
+        assert_eq!(
+            offset_manager.offsets[0..21],
+            [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 0]
+        );
 
         assert_eq!(offset_manager.remove(11), None);
 
@@ -252,7 +274,10 @@ mod tests {
         assert_eq!(offset_manager.len, 18);
         assert_eq!(offset_manager.count, 17);
         assert_eq!(offset_manager.last_added, Some(19));
-        assert_eq!(offset_manager.offsets[0..21], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 12, 13, 14, 15, 16, 17, 18, 19, 0]);
+        assert_eq!(
+            offset_manager.offsets[0..21],
+            [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 12, 13, 14, 15, 16, 17, 18, 19, 0]
+        );
 
         assert_eq!(offset_manager.remove(13), None);
 
@@ -260,7 +285,10 @@ mod tests {
         assert_eq!(offset_manager.len, 18);
         assert_eq!(offset_manager.count, 16);
         assert_eq!(offset_manager.last_added, Some(19));
-        assert_eq!(offset_manager.offsets[0..21], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 12, 12, 14, 15, 16, 17, 18, 19, 0]);
+        assert_eq!(
+            offset_manager.offsets[0..21],
+            [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 12, 12, 14, 15, 16, 17, 18, 19, 0]
+        );
 
         assert_eq!(offset_manager.remove(12), None);
 
@@ -268,7 +296,10 @@ mod tests {
         assert_eq!(offset_manager.len, 18);
         assert_eq!(offset_manager.count, 15);
         assert_eq!(offset_manager.last_added, Some(19));
-        assert_eq!(offset_manager.offsets[0..21], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10, 10, 14, 15, 16, 17, 18, 19, 0]);
+        assert_eq!(
+            offset_manager.offsets[0..21],
+            [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10, 10, 14, 15, 16, 17, 18, 19, 0]
+        );
 
         assert_eq!(offset_manager.remove(10), None);
 
@@ -276,7 +307,10 @@ mod tests {
         assert_eq!(offset_manager.len, 18);
         assert_eq!(offset_manager.count, 14);
         assert_eq!(offset_manager.last_added, Some(19));
-        assert_eq!(offset_manager.offsets[0..21], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 9, 9, 9, 14, 15, 16, 17, 18, 19, 0]);
+        assert_eq!(
+            offset_manager.offsets[0..21],
+            [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 9, 9, 9, 14, 15, 16, 17, 18, 19, 0]
+        );
 
         assert_eq!(offset_manager.remove(18), None);
 
@@ -284,7 +318,10 @@ mod tests {
         assert_eq!(offset_manager.len, 18);
         assert_eq!(offset_manager.count, 13);
         assert_eq!(offset_manager.last_added, Some(19));
-        assert_eq!(offset_manager.offsets[0..21], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 9, 9, 9, 14, 15, 16, 17, 17, 19, 0]);
+        assert_eq!(
+            offset_manager.offsets[0..21],
+            [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 9, 9, 9, 14, 15, 16, 17, 17, 19, 0]
+        );
 
         assert_eq!(offset_manager.remove(19), None);
 
@@ -292,7 +329,10 @@ mod tests {
         assert_eq!(offset_manager.len, 17);
         assert_eq!(offset_manager.count, 12);
         assert_eq!(offset_manager.last_added, Some(19));
-        assert_eq!(offset_manager.offsets[0..21], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 9, 9, 9, 14, 15, 16, 17, 17, 19, 0]);
+        assert_eq!(
+            offset_manager.offsets[0..21],
+            [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 9, 9, 9, 14, 15, 16, 17, 17, 19, 0]
+        );
 
         assert_eq!(offset_manager.remove(17), None);
         assert_eq!(offset_manager.remove(4), None);
@@ -311,7 +351,10 @@ mod tests {
         assert_eq!(offset_manager.len, 0);
         assert_eq!(offset_manager.count, 0);
         assert_eq!(offset_manager.last_added, Some(19));
-        assert_eq!(offset_manager.offsets[0..21], [0, 1, 2, 3, 3, 5, 5, 5, 8, 9, 9, 9, 9, 9, 9, 15, 16, 17, 17, 19, 0]);
+        assert_eq!(
+            offset_manager.offsets[0..21],
+            [0, 1, 2, 3, 3, 5, 5, 5, 8, 9, 9, 9, 9, 9, 9, 15, 16, 17, 17, 19, 0]
+        );
     }
 
     #[test]
@@ -324,14 +367,20 @@ mod tests {
         assert_eq!(offset_manager.len, 19);
         assert_eq!(offset_manager.count, 18);
         assert_eq!(offset_manager.last_added, Some(19));
-        assert_eq!(offset_manager.offsets[0..21], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 17, 19, 0]);
+        assert_eq!(
+            offset_manager.offsets[0..21],
+            [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 17, 19, 0]
+        );
 
         offset_manager.append(20);
         assert_eq!(offset_manager.start, 0);
         assert_eq!(offset_manager.len, 20);
         assert_eq!(offset_manager.count, 19);
         assert_eq!(offset_manager.last_added, Some(20));
-        assert_eq!(offset_manager.offsets[0..21], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 17, 20, 0]);
+        assert_eq!(
+            offset_manager.offsets[0..21],
+            [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 17, 20, 0]
+        );
     }
 
     #[test]
@@ -455,6 +504,9 @@ mod tests {
             assert_eq!(offset_manager.len, i as usize + 1);
         }
 
-        assert_eq!(offset_manager.offsets, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 0]);
+        assert_eq!(
+            offset_manager.offsets,
+            [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 0]
+        );
     }
 }

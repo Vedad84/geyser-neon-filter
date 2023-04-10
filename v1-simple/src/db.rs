@@ -1,6 +1,6 @@
 use std::future::Future;
-use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Result;
@@ -129,18 +129,25 @@ pub async fn db_stmt_executor<M, F>(
     queue_len_gauge: Gauge<f64, AtomicU64>,
     sigterm_rx: watch::Receiver<()>,
     max_db_executor_tasks: usize,
-    process_msg_async: fn (Arc<Client>, Arc<M>) -> F,
+    process_msg_async: fn(Arc<Client>, Arc<M>) -> F,
 ) where
     M: Send + Sync + 'static,
     F: Future<Output = Result<u64>> + Send + 'static,
 {
     let (offsets_tx, offsets_rx) = flume::unbounded::<OffsetManagerCommand>();
 
-    tokio::spawn(offset_manager_service(topic.clone(), Arc::clone(&consumer), offsets_rx));
+    tokio::spawn(offset_manager_service(
+        topic.clone(),
+        Arc::clone(&consumer),
+        offsets_rx,
+    ));
 
     while let Ok((message, offset)) = queue_rx.recv_async().await {
         queue_len_gauge.set(queue_rx.len() as f64);
-        if let Err(err) = offsets_tx.send_async(OffsetManagerCommand::StartProcessing(offset.clone())).await {
+        if let Err(err) = offsets_tx
+            .send_async(OffsetManagerCommand::StartProcessing(offset.clone()))
+            .await
+        {
             error!("Unable to send offset being processed for topic `{topic}`. Offset manager service down? Error: {err}");
         }
 
@@ -148,18 +155,16 @@ pub async fn db_stmt_executor<M, F>(
             tokio::task::yield_now().await;
         }
 
-        tokio::spawn(
-            process_message(
-                Arc::clone(&db_pool),
-                topic.clone(),
-                (message, offset),
-                offsets_tx.clone(),
-                sigterm_rx.clone(),
-                Arc::clone(&stats),
-                RAIICounter::new(&stats.processing_tokio_tasks),
-                process_msg_async,
-            ),
-        );
+        tokio::spawn(process_message(
+            Arc::clone(&db_pool),
+            topic.clone(),
+            (message, offset),
+            offsets_tx.clone(),
+            sigterm_rx.clone(),
+            Arc::clone(&stats),
+            RAIICounter::new(&stats.processing_tokio_tasks),
+            process_msg_async,
+        ));
     }
 
     info!("DB statements executor for topic: `{topic}` has shut down");
@@ -184,15 +189,15 @@ async fn process_message<M, F>(
 
     let client = loop {
         select! {
-                _ = sigterm_rx.changed() => return,
-                db_pool_result = db_pool.get() => match db_pool_result {
-                    Ok(client) => break Arc::new(client),
-                    Err(err) => {
-                        error!("Failed to get a client from the pool, error: {err:?}");
-                        idle_interval.tick().await;
-                    },
+            _ = sigterm_rx.changed() => return,
+            db_pool_result = db_pool.get() => match db_pool_result {
+                Ok(client) => break Arc::new(client),
+                Err(err) => {
+                    error!("Failed to get a client from the pool, error: {err:?}");
+                    idle_interval.tick().await;
                 },
-            };
+            },
+        };
     };
 
     loop {
@@ -204,14 +209,19 @@ async fn process_message<M, F>(
         match result {
             Ok(_) => break,
             Err(err) => {
-                error!("Failed to execute store value from topic `{topic}` into the DB, error {err}");
+                error!(
+                    "Failed to execute store value from topic `{topic}` into the DB, error {err}"
+                );
                 stats.db_errors.inc();
                 idle_interval.tick().await;
             }
         }
     }
 
-    if let Err(err) = offsets_tx.send_async(OffsetManagerCommand::ProcessedSuccessfully(offset)).await {
+    if let Err(err) = offsets_tx
+        .send_async(OffsetManagerCommand::ProcessedSuccessfully(offset))
+        .await
+    {
         error!("Unable to send offset successfully processed status for topic `{topic}`. Offset manager service down?, error: {err}");
     }
 }
