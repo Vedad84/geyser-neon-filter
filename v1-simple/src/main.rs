@@ -1,4 +1,3 @@
-mod account_ordering;
 mod app_config;
 mod build_info;
 mod consumer;
@@ -17,7 +16,6 @@ mod sigterm_notifier;
 use std::sync::Arc;
 
 use crate::{
-    account_ordering::run_account_ordering,
     build_info::get_build_info,
     consumer::run_consumer,
     consumer_stats::ContextWithStats,
@@ -227,10 +225,6 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
         exec_block_statement,
     ));
 
-    let account_ordering_job = tokio::spawn(
-        run_account_ordering(Arc::clone(&db_pool), sigterm_rx.clone())
-    );
-
     let _ = tokio::join!(
         consumer_update_account_handle,
         consumer_update_slot_handle,
@@ -242,7 +236,6 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
         block_db_stmt_executor,
         prometheus,
         cfg_watcher,
-        account_ordering_job,
     );
 
     info!("All services have shut down");
