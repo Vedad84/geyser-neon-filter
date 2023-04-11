@@ -1,4 +1,3 @@
-mod account_ordering;
 mod app_config;
 mod build_info;
 mod consumer;
@@ -16,8 +15,13 @@ mod sigterm_notifier;
 
 use std::sync::Arc;
 
+use crate::consumer::{new_consumer, QueueMsg};
+use crate::db::{
+    db_stmt_executor, exec_account_statement, exec_block_statement, exec_slot_statement,
+    exec_transaction_statement,
+};
+use crate::sigterm_notifier::sigterm_notifier;
 use crate::{
-    account_ordering::run_account_ordering,
     build_info::get_build_info,
     consumer::run_consumer,
     consumer_stats::ContextWithStats,
@@ -27,7 +31,6 @@ use crate::{
 };
 use app_config::{env_build_config, AppConfig};
 use clap::{Arg, Command};
-use crate::db::{db_stmt_executor, exec_account_statement, exec_block_statement, exec_slot_statement, exec_transaction_statement};
 use fast_log::{
     consts::LogSize,
     plugin::{file_split::RollingType, packer::LogPacker},
@@ -40,8 +43,6 @@ use kafka_common::kafka_structs::{
 use log::{info, Log};
 use prometheus::start_prometheus;
 use tokio::{fs, sync::RwLock};
-use crate::consumer::{new_consumer, QueueMsg};
-use crate::sigterm_notifier::sigterm_notifier;
 
 async fn run(mut config: AppConfig, filter_config: FilterConfig) {
     let logger: &'static Logger = fast_log::init(fast_log::Config::new().console().file_split(
@@ -110,33 +111,31 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
 
     let (account_tx, account_rx) = flume::bounded::<QueueMsg<DbAccountInfo>>(account_capacity);
     let (slot_tx, slot_rx) = flume::bounded::<QueueMsg<UpdateSlotStatus>>(slot_capacity);
-    let (transaction_tx, transaction_rx) = flume::bounded::<QueueMsg<DbTransaction>>(transaction_capacity);
+    let (transaction_tx, transaction_rx) =
+        flume::bounded::<QueueMsg<DbTransaction>>(transaction_capacity);
     let (block_tx, block_rx) = flume::bounded::<QueueMsg<DbBlockInfo>>(block_capacity);
 
     tokio::spawn(sigterm_notifier(sigterm_tx));
 
-    let cfg_watcher = tokio::spawn(async_watch(config.clone(), filter_config.clone(), sigterm_rx.clone()));
-
-    let consumer_update_account = new_consumer(
-        &config,
-        &update_account_topic,
-        ctx_stats.clone(),
-    );
-
-    let consumer_update_account_handle = tokio::spawn(run_consumer::<UpdateAccount, DbAccountInfo>(
-        Arc::clone(&consumer_update_account),
+    let cfg_watcher = tokio::spawn(async_watch(
+        config.clone(),
         filter_config.clone(),
-        update_account_topic.clone(),
-        account_tx,
-        ctx_stats.clone(),
         sigterm_rx.clone(),
     ));
 
-    let consumer_update_slot = new_consumer(
-        &config,
-        &update_slot_topic,
-        ctx_stats.clone(),
-    );
+    let consumer_update_account = new_consumer(&config, &update_account_topic, ctx_stats.clone());
+
+    let consumer_update_account_handle =
+        tokio::spawn(run_consumer::<UpdateAccount, DbAccountInfo>(
+            Arc::clone(&consumer_update_account),
+            filter_config.clone(),
+            update_account_topic.clone(),
+            account_tx,
+            ctx_stats.clone(),
+            sigterm_rx.clone(),
+        ));
+
+    let consumer_update_slot = new_consumer(&config, &update_slot_topic, ctx_stats.clone());
 
     let consumer_update_slot_handle = tokio::spawn(run_consumer(
         Arc::clone(&consumer_update_slot),
@@ -147,35 +146,29 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
         sigterm_rx.clone(),
     ));
 
-    let consumer_transaction = new_consumer(
-        &config,
-        &notify_transaction_topic,
-        ctx_stats.clone(),
-    );
+    let consumer_transaction = new_consumer(&config, &notify_transaction_topic, ctx_stats.clone());
 
-    let consumer_transaction_handle = tokio::spawn(run_consumer::<NotifyTransaction, DbTransaction>(
-        Arc::clone(&consumer_transaction),
-        filter_config.clone(),
-        notify_transaction_topic.clone(),
-        transaction_tx,
-        ctx_stats.clone(),
-        sigterm_rx.clone(),
-    ));
+    let consumer_transaction_handle =
+        tokio::spawn(run_consumer::<NotifyTransaction, DbTransaction>(
+            Arc::clone(&consumer_transaction),
+            filter_config.clone(),
+            notify_transaction_topic.clone(),
+            transaction_tx,
+            ctx_stats.clone(),
+            sigterm_rx.clone(),
+        ));
 
-    let consumer_notify_block = new_consumer(
-        &config,
-        &notify_block_topic,
-        ctx_stats.clone(),
-    );
+    let consumer_notify_block = new_consumer(&config, &notify_block_topic, ctx_stats.clone());
 
-    let consumer_notify_block_handle = tokio::spawn(run_consumer::<NotifyBlockMetaData, DbBlockInfo>(
-        Arc::clone(&consumer_notify_block),
-        filter_config.clone(),
-        notify_block_topic.clone(),
-        block_tx,
-        ctx_stats.clone(),
-        sigterm_rx.clone(),
-    ));
+    let consumer_notify_block_handle =
+        tokio::spawn(run_consumer::<NotifyBlockMetaData, DbBlockInfo>(
+            Arc::clone(&consumer_notify_block),
+            filter_config.clone(),
+            notify_block_topic.clone(),
+            block_tx,
+            ctx_stats.clone(),
+            sigterm_rx.clone(),
+        ));
 
     let max_db_executor_tasks = config.max_db_executor_tasks();
 
@@ -227,10 +220,6 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
         exec_block_statement,
     ));
 
-    let account_ordering_job = tokio::spawn(
-        run_account_ordering(Arc::clone(&db_pool), sigterm_rx.clone())
-    );
-
     let _ = tokio::join!(
         consumer_update_account_handle,
         consumer_update_slot_handle,
@@ -242,7 +231,6 @@ async fn run(mut config: AppConfig, filter_config: FilterConfig) {
         block_db_stmt_executor,
         prometheus,
         cfg_watcher,
-        account_ordering_job,
     );
 
     info!("All services have shut down");
