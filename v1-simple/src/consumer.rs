@@ -13,7 +13,7 @@ use std::sync::{
     Arc,
 };
 use tokio::select;
-use tokio::sync::{RwLock, watch};
+use tokio::sync::{watch, RwLock};
 
 use crate::{
     app_config::AppConfig,
@@ -104,8 +104,14 @@ pub async fn process_message<T, S>(
                 queue_len.set(filter_tx.len() as f64);
                 received.inc();
 
-                let offset = Offset { partition: message.partition(), offset: message.offset() };
-                if let Err(e) = filter_tx.send_async((Arc::new(Into::<S>::into(event)), offset)).await {
+                let offset = Offset {
+                    partition: message.partition(),
+                    offset: message.offset(),
+                };
+                if let Err(e) = filter_tx
+                    .send_async((Arc::new(Into::<S>::into(event)), offset))
+                    .await
+                {
                     error!("Failed to send the data {type_name}, error {e}");
                 }
             }
@@ -145,9 +151,9 @@ pub fn new_consumer(
         .create_with_context(ctx_stats)
         .expect("Consumer creation failed");
 
-    consumer.subscribe(&[topic]).unwrap_or_else(|e| {
-        panic!("Couldn't subscribe to topic {topic}, error: {e}")
-    });
+    consumer
+        .subscribe(&[topic])
+        .unwrap_or_else(|e| panic!("Couldn't subscribe to topic {topic}, error: {e}"));
 
     Arc::new(consumer)
 }
