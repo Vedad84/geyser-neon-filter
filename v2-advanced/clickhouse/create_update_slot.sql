@@ -1,18 +1,17 @@
 CREATE DATABASE IF NOT EXISTS events ON CLUSTER 'events';
 
-CREATE TABLE IF NOT EXISTS events.update_slot_local ON CLUSTER '{cluster}' (
+CREATE TABLE IF NOT EXISTS events.update_slot ON CLUSTER '{cluster}' (
     slot UInt64 CODEC(DoubleDelta, ZSTD),
     parent Nullable(UInt64) default 0 CODEC(DoubleDelta, ZSTD),
-    slot_status Enum('Processed' = 1, 'Rooted' = 2, 'Confirmed' = 3) CODEC(DoubleDelta, ZSTD),
+    slot_status Enum('Processed' = 1,  'Confirmed' = 2, 'Rooted' = 3) CODEC(DoubleDelta, ZSTD),
     retrieved_time DateTime64 CODEC(DoubleDelta, ZSTD)
 ) ENGINE = ReplicatedMergeTree(
-    '/clickhouse/tables/{shard}/update_slot_local',
-    '{replica}'
-) PRIMARY KEY(slot, retrieved_time)
-ORDER BY (slot, retrieved_time)
+    '/clickhouse/tables/{shard}/update_slot',
+    '{replica}',
+    slot_status
+) PRIMARY KEY(slot, slot_status)
+ORDER BY (slot, slot_status)
 SETTINGS index_granularity=8192;
-
-CREATE TABLE IF NOT EXISTS events.update_slot_distributed ON CLUSTER '{cluster}' AS events.update_slot_local ENGINE = Distributed('{cluster}', events, update_slot_local, rand());
 
 CREATE TABLE IF NOT EXISTS events.update_slot_queue ON CLUSTER '{cluster}' (
     slot UInt64,
@@ -26,7 +25,7 @@ kafka_num_consumers = 1,
 kafka_format = 'JSONEachRow';
 
 -- ENGINE Should be ReplicatedSummingMergeTree?
-CREATE MATERIALIZED VIEW IF NOT EXISTS events.update_slot_queue_mv ON CLUSTER '{cluster}' to events.update_slot_distributed AS
+CREATE MATERIALIZED VIEW IF NOT EXISTS events.update_slot_queue_mv ON CLUSTER '{cluster}' to events.update_slot AS
 SELECT slot,
     parent,
     slot_status,

@@ -8,5 +8,5 @@ CREATE FUNCTION get_recent_update_slot ON CLUSTER 'events' AS (_pubkey, _slot)->
 );
 
 CREATE FUNCTION get_earliest_slot ON CLUSTER 'events' AS ()->(
-    SELECT MIN(slot) FROM events.update_slot_distributed
+    SELECT MIN(slot) FROM events.update_slot
 );

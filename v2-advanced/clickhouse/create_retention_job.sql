@@ -13,9 +13,11 @@ SELECT DISTINCT ON (ual.pubkey)
     ual.retrieved_time,
     (SELECT MAX(oal.retention_counter) + 1 FROM events.older_account_local oal)
 FROM events.update_account_local ual
+INNER JOIN events.update_slot usl
+ON usl.slot = ual.slot AND usd.status = 'Rooted'
 WHERE
     ual.slot > (SELECT MAX(oal.slot) FROM events.older_account_local oal)
-    AND ual.slot <= (SELECT MAX(usd.slot) - 6480000 FROM events.update_slot_distributed usd)
+    AND ual.slot <= (SELECT MAX(usd.slot) - 6480000 FROM events.update_slot usd)
 ORDER BY ual.pubkey DESC, ual.slot DESC, ual.write_version DESC;
 
 OPTIMIZE TABLE events.older_account_local DEDUPLICATE;
