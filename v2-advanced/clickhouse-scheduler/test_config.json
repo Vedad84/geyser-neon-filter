@@ -18,7 +18,7 @@
     "password": "",
     "tasks": [
         {
-            "task_name": "Two multiply queries",
+            "task_name": "Two_multiply_queries",
             "queries": [
                 "SELECT 1*1;",
                 "SELECT 2*1;"
@@ -27,7 +27,7 @@
             "average_depth": 30
         },
         {
-            "task_name": "Three sum queries",
+            "task_name": "Three_sum_queries",
             "queries": [
                 "SELECT 1+1;",
                 "SELECT 2+1;",
