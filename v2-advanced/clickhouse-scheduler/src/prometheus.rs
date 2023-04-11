@@ -34,10 +34,10 @@ pub async fn start_prometheus(
     task_names.iter()
         .zip(task_metrics)
         .for_each(|(name, metric)| {
-            let min_time_name = format!("{name} min_time");
-            let max_time_name = format!("{name} max_time");
-            let avg_time_name = format!("{name} avg_time");
-            let errors_name = format!("{name} error counter");
+            let min_time_name = format!("{name}_min_time");
+            let max_time_name = format!("{name}_max_time");
+            let avg_time_name = format!("{name}_avg_time");
+            let errors_name = format!("{name}_error_counter");
 
             registry.register(&min_time_name, &min_time_name, metric.min_time.clone());
             registry.register(&max_time_name, &max_time_name, metric.max_time.clone());
