@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS events.update_slot ON CLUSTER '{cluster}' (
     slot_status Enum('Processed' = 1,  'Confirmed' = 2, 'Rooted' = 3) CODEC(DoubleDelta, ZSTD),
     retrieved_time DateTime64 CODEC(DoubleDelta, ZSTD)
 ) ENGINE = ReplicatedMergeTree(
-    '/clickhouse/tables/{shard}/update_slot',
+    '/clickhouse/tables/update_slot',
     '{replica}',
     slot_status
 ) PRIMARY KEY(slot, slot_status)
