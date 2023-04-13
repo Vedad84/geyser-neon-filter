@@ -16,7 +16,7 @@ SETTINGS index_granularity=8192;
 CREATE TABLE IF NOT EXISTS events.update_slot_queue ON CLUSTER '{cluster}' (
     slot UInt64,
     parent Nullable(UInt64) default 0,
-    slot_status Enum('Processed' = 1, 'Rooted' = 2, 'Confirmed' = 3),
+    slot_status Enum('Processed' = 1,  'Confirmed' = 2, 'Rooted' = 3),
     retrieved_time DateTime64 DEFAULT now64()
 ) ENGINE = Kafka SETTINGS kafka_broker_list = 'kafka:29092',
 kafka_topic_list = 'update_slot',
