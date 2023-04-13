@@ -146,7 +146,11 @@ pub async fn start_prometheus(
     start_metrics_server(metrics_addr, registry, sigterm_rx).await
 }
 
-async fn start_metrics_server(metrics_addr: SocketAddr, registry: Registry, mut sigterm_rx: watch::Receiver<()>,) {
+async fn start_metrics_server(
+    metrics_addr: SocketAddr,
+    registry: Registry,
+    mut sigterm_rx: watch::Receiver<()>,
+) {
     info!("Starting metrics server on {metrics_addr}");
 
     let registry = Arc::new(registry);

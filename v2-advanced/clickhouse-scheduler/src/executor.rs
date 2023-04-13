@@ -9,9 +9,12 @@ use tokio::task::JoinSet;
 use tokio::time::interval;
 use tryhard::backoff_strategies::BackoffStrategy;
 use tryhard::RetryPolicy;
+use std::time::Instant;
 
 use crate::client::ClickHouse;
 use crate::config::{Config, Task};
+use crate::prometheus::TaskMetric;
+use std::collections::VecDeque;
 
 async fn execute_queries(client: &Client, task: &Task) -> Result<()> {
     for q in task.queries.iter() {
@@ -45,6 +48,7 @@ async fn execute_task(
     clients: Arc<Vec<Client>>,
     task: Task,
     mut shutdown: Receiver<()>,
+    metric: TaskMetric,
 ) {
     let mut task_interval = interval(task.task_interval);
     let retries = config.http_settings.retries;
@@ -54,11 +58,22 @@ async fn execute_task(
         retry_delay,
         should_stop: should_stop.clone(),
     };
+    let mut measurement_queue: VecDeque<f64> = VecDeque::from(vec![0_f64; task.average_depth]);
 
     loop {
         tokio::select! {
             _ = task_interval.tick() => {
-                execute_interval(&clients, &task, retries, &shutdown_backoff, shutdown.clone()).await;
+                let execution_time = execute_interval(&clients, &task, retries, &shutdown_backoff, shutdown.clone()).await;
+                if let Some(execution_time) = execution_time {
+                    measurement_queue.push_back(execution_time);
+                    measurement_queue.pop_front();
+                    metric.avg_time.set(measurement_queue.iter().sum::<f64>() / measurement_queue.len() as f64);
+                    metric.min_time.set(*measurement_queue.iter().min_by( |a, b| a.total_cmp(b)).unwrap_or(&0_f64));
+                    metric.max_time.set(*measurement_queue.iter().max_by( |a, b| a.total_cmp(b)).unwrap_or(&0_f64));
+                 }
+                else {
+                    metric.errors.inc();
+                }
             }
             _ = shutdown.changed() => {
                 info!("Shutting down task: {}", task.task_name);
@@ -75,12 +90,13 @@ async fn execute_interval(
     retries: u32,
     shutdown_backoff: &ShutdownBackoff,
     shutdown: Receiver<()>,
-) {
+) -> Option<f64> {
     info!(
         "Executing task: {}, with interval {:#?}",
         task.task_name, task.task_interval
     );
 
+    let time_start = Instant::now();
     for client in clients.iter() {
         if execute_with_retry(client, task, retries, shutdown_backoff, shutdown.clone())
             .await
@@ -92,8 +108,11 @@ async fn execute_interval(
             );
             continue;
         }
-        break;
+        let execution_time = Instant::now().duration_since(time_start);
+        return  Some(execution_time.as_secs_f64());
     }
+
+    None
 }
 
 async fn execute_with_retry(
@@ -113,17 +132,18 @@ async fn execute_with_retry(
     }
 }
 
-pub async fn start_tasks(config: Arc<Config>, shutdown: Receiver<()>) {
+pub async fn start_tasks(config: Arc<Config>, shutdown: Receiver<()>, task_metrics: Vec<TaskMetric>  ) {
     let mut set = JoinSet::new();
 
     let clients = Arc::new(ClickHouse::from_config(&config));
     let tasks = config.tasks.clone();
 
-    for task in tasks {
+    for (task, metric) in tasks.iter().zip(task_metrics) {
+        let task = task.clone();
         let config = Arc::clone(&config);
         let clients = clients.clone();
         let task_shutdown = shutdown.clone();
-        set.spawn(async move { execute_task(config, clients, task, task_shutdown).await });
+        set.spawn(async move { execute_task(config, clients, task, task_shutdown, metric).await });
     }
 
     while let Some(_res) = set.join_next().await {}

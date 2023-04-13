@@ -18,8 +18,8 @@ log = "0.4.17"
 fast_log = { version = "1.5.54" }
 flume = "0.10.14"
 deadpool-postgres = { version = "0.10.5" }
-tokio-postgres = { version = "0.7.7", features = ["with-chrono-0_4"] }
-postgres-types = { version = "0.2.4", features = ["derive"] }
+tokio-postgres = { version = "0.7.8", features = ["with-chrono-0_4"] }
+postgres-types = { version = "0.2.5", features = ["derive"] }
 solana-runtime = { version = "=1.14.14" }
 solana-transaction-status = { version = "=1.14.14" }
 solana-sdk = { version = "=1.14.14" }
@@ -28,7 +28,7 @@ bs58 = "0.4.0"
 strum = "0.24"
 strum_macros = "0.24"
 build-info = { version = "0.0.30" }
-prometheus-client = "0.19.0"
+prometheus-client = "0.20.0"
 hyper = { version = "0.14.25", features = ["server", "http1", "tcp"] }
 notify = "5.1"
 

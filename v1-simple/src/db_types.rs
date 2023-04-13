@@ -218,18 +218,13 @@ impl fmt::Display for DbAccountInfo {
     }
 }
 
-fn range_check(lamports: u64, rent_epoch: u64, write_version: u64) -> Result<()> {
+fn range_check(lamports: u64, rent_epoch: u64) -> Result<()> {
     if lamports > std::i64::MAX as u64 {
         return Err(anyhow!("account_info.lamports greater than std::i64::MAX!"));
     }
     if rent_epoch > std::i64::MAX as u64 {
         return Err(anyhow!(
             "account_info.rent_epoch greater than std::i64::MAX!"
-        ));
-    }
-    if write_version > std::i64::MAX as u64 {
-        return Err(anyhow!(
-            "account_info.write_version greater than std::i64::MAX!"
         ));
     }
     Ok(())
@@ -241,11 +236,7 @@ impl TryFrom<&UpdateAccount> for DbAccountInfo {
     fn try_from(update_account: &UpdateAccount) -> Result<Self> {
         match &update_account.account {
             kafka_common::kafka_structs::KafkaReplicaAccountInfoVersions::V0_0_1(account_info) => {
-                range_check(
-                    account_info.lamports,
-                    account_info.rent_epoch,
-                    account_info.write_version,
-                )?;
+                range_check(account_info.lamports, account_info.rent_epoch)?;
 
                 Ok(DbAccountInfo {
                     pubkey: account_info.pubkey.clone(),
@@ -260,11 +251,7 @@ impl TryFrom<&UpdateAccount> for DbAccountInfo {
                 })
             }
             kafka_common::kafka_structs::KafkaReplicaAccountInfoVersions::V0_0_2(account_info) => {
-                range_check(
-                    account_info.lamports,
-                    account_info.rent_epoch,
-                    account_info.write_version,
-                )?;
+                range_check(account_info.lamports, account_info.rent_epoch)?;
 
                 Ok(DbAccountInfo {
                     pubkey: account_info.pubkey.clone(),
@@ -274,7 +261,7 @@ impl TryFrom<&UpdateAccount> for DbAccountInfo {
                     rent_epoch: account_info.rent_epoch as i64,
                     data: account_info.data.clone(),
                     slot: update_account.slot as i64,
-                    write_version: account_info.write_version as i64,
+                    write_version: account_info.write_version,
                     txn_signature: account_info.txn_signature.map(|v| v.as_ref().to_vec()),
                 })
             }
@@ -307,7 +294,7 @@ impl From<UpdateAccount> for DbAccountInfo {
                     rent_epoch: account_info.rent_epoch as i64,
                     data: account_info.data.clone(),
                     slot: update_account.slot as i64,
-                    write_version: account_info.write_version as i64,
+                    write_version: account_info.write_version,
                     txn_signature: account_info.txn_signature.map(|v| v.as_ref().to_vec()),
                 }
             }

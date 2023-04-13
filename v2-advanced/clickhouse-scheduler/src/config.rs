@@ -52,6 +52,7 @@ pub struct Config {
     pub username: String,
     pub password: String,
     pub tasks: TaskList,
+    pub prometheus_port: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -60,4 +61,5 @@ pub struct Task {
     pub queries: Vec<String>,
     #[serde(with = "humantime_serde")]
     pub task_interval: Duration,
+    pub average_depth: usize,
 }

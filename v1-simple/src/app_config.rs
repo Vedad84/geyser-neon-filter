@@ -150,7 +150,8 @@ pub fn env_build_config() -> (AppConfig, FilterConfig) {
 
     let filter_config_path = env::var("FILTER_CONFIG_PATH").expect("FILTER_CONFIG_PATH is not set");
 
-    let max_db_executor_tasks = env::var("MAX_DB_EXECUTOR_TASKS").expect("MAX_DB_EXECUTOR_TASKS is not set");
+    let max_db_executor_tasks =
+        env::var("MAX_DB_EXECUTOR_TASKS").expect("MAX_DB_EXECUTOR_TASKS is not set");
 
     let cfg = AppConfig {
         filter_log_path,

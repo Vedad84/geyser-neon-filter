@@ -1,9 +1,9 @@
-use std::sync::{Arc, atomic::AtomicU64};
+use std::sync::{atomic::AtomicU64, Arc};
 
 use log::info;
-use prometheus_client::metrics::{counter::Counter, gauge::Gauge};
 use prometheus_client::metrics::gauge::Atomic;
-use rdkafka::{ClientContext, consumer::ConsumerContext, Statistics};
+use prometheus_client::metrics::{counter::Counter, gauge::Gauge};
+use rdkafka::{consumer::ConsumerContext, ClientContext, Statistics};
 
 #[derive(Default)]
 pub struct Stats {
@@ -41,13 +41,15 @@ impl ClientContext for ContextWithStats {
 impl ConsumerContext for ContextWithStats {}
 
 pub struct RAIICounter<N, A: Atomic<N>> {
-    gauge: Gauge<N, A>
+    gauge: Gauge<N, A>,
 }
 
 impl<N, A: Atomic<N>> RAIICounter<N, A> {
     pub fn new(gauge: &Gauge<N, A>) -> Self {
         gauge.inc();
-        Self { gauge: gauge.clone() }
+        Self {
+            gauge: gauge.clone(),
+        }
     }
 }
 

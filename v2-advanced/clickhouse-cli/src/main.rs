@@ -140,7 +140,7 @@ async fn run_interactive(client: &Client) {
                     Err(e) => panic!("Failed to execute show_function_list, error: {e}"),
                 };
                 for s in function_list {
-                    println!("{}", s);
+                    println!("{s}");
                 }
             }
 

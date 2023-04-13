@@ -12,7 +12,7 @@ use std::hash::Hash;
 use std::sync::Arc;
 use tokio::select;
 use tokio::sync::mpsc::{channel, Receiver};
-use tokio::sync::{RwLock, watch};
+use tokio::sync::{watch, RwLock};
 
 struct HDiff<'a, T: 'a + Eq + Hash, S: std::hash::BuildHasher> {
     added: Difference<'a, T, S>,
