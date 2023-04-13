@@ -1,9 +1,9 @@
 mod client;
 mod config;
 mod executor;
+mod prometheus;
 
 use std::sync::Arc;
-
 use clap::{Arg, Command};
 use config::Config;
 use executor::start_tasks;
@@ -14,8 +14,9 @@ use fast_log::Logger;
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
 use tokio::signal::unix::{signal, SignalKind};
-
+use prometheus::{start_prometheus, TaskMetric};
 use log::{info, Log};
+
 
 async fn read_file_to_string(path: &str) -> Result<String, std::io::Error> {
     let mut file = File::open(path).await?;
@@ -69,7 +70,29 @@ async fn main() {
         let _ = shutdown_tx.send(());
     });
 
-    start_tasks(Arc::new(config), shutdown_rx).await;
+
+    let (task_names, task_metrics) : (Vec<String>, Vec<TaskMetric>)  =
+        config
+            .tasks
+            .iter()
+            .map(|task| (task.task_name.clone(), TaskMetric::default()))
+            .unzip();
+
+    let prometheus_port = config
+        .prometheus_port
+        .parse()
+        .unwrap_or_else(|e| panic!("Wrong prometheus port number, error: {e}"));
+
+    let (prometheus_down_tx, prometheus_down_rx) = tokio::sync::oneshot::channel::<()>();
+
+    let prometheus_handler = tokio::spawn(
+            start_prometheus(task_metrics.clone(), task_names, prometheus_port, prometheus_down_rx)
+    );
+
+    start_tasks(Arc::new(config), shutdown_rx, task_metrics).await;
+
+    prometheus_down_tx.send(()).ok();
+    let _ = prometheus_handler.await;
 
     let _ = sigterm_handler.await;
 

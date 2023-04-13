@@ -701,6 +701,7 @@ dependencies = [
  "humantime-serde",
  "hyper",
  "log",
+ "prometheus-client",
  "serde",
  "serde_json",
  "tokio",

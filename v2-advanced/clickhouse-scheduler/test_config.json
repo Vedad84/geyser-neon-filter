@@ -18,21 +18,24 @@
     "password": "",
     "tasks": [
         {
-            "task_name": "Two multiply queries",
+            "task_name": "two_multiply_queries",
             "queries": [
                 "SELECT 1*1;",
                 "SELECT 2*1;"
             ],
-            "task_interval": "1m"
+            "task_interval": "1m",
+            "average_depth": 30
         },
         {
-            "task_name": "Three sum queries",
+            "task_name": "three_sum_queries",
             "queries": [
                 "SELECT 1+1;",
                 "SELECT 2+1;",
                 "SELECT 3+1;"
             ],
-            "task_interval": "3s"
+            "task_interval": "3s",
+            "average_depth": 30
         }
-    ]
+    ],
+    "prometheus_port": "9090"
 }
