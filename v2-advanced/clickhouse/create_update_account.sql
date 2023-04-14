@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS events.update_account_queue ON CLUSTER '{cluster}' (
     executable Bool,
     rent_epoch UInt64,
     data Array(UInt8),
-    write_version UInt64,
+    write_version Int64,
     txn_signature Array(Nullable(UInt8)),
     slot UInt64,
     is_startup Bool,
