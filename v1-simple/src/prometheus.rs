@@ -29,37 +29,37 @@ pub async fn start_prometheus(
     let mut registry = <Registry>::default();
 
     registry.register(
-        "filtered_events",
+        "neon_filter_filtered_events",
         "How many events were skipped by filter",
         stats.filtered_events.clone(),
     );
 
     registry.register(
-        "kafka_bytes_received",
+        "neon_filter_kafka_bytes_received",
         "How many bytes were received from Kafka cluster",
         stats.kafka_bytes_rx.clone(),
     );
 
     registry.register(
-        "kafka_errors_consumer",
+        "neon_filter_kafka_errors_consumer",
         "How many consumer errors occurred",
         stats.kafka_errors_consumer.clone(),
     );
 
     registry.register(
-        "kafka_errors_deserialize",
+        "neon_filter_kafka_errors_deserialize",
         "How many deserialize errors occurred",
         stats.kafka_errors_deserialize.clone(),
     );
 
     registry.register(
-        "processing_tokio_tasks",
+        "neon_filter_processing_tokio_tasks",
         "How many tasks currently spawned and not finished yet",
         stats.processing_tokio_tasks.clone(),
     );
 
     registry.register(
-        "db_errors",
+        "neon_filter_db_errors",
         "How many database errors occurred",
         stats.db_errors.clone(),
     );
@@ -70,7 +70,7 @@ pub async fn start_prometheus(
     ));
 
     registry_with_label.register(
-        "queue_len",
+        "neon_filter_queue_len",
         "How many UpdateAccount messages queued up for processing",
         stats.queue_len_update_account.clone(),
     );
@@ -79,7 +79,7 @@ pub async fn start_prometheus(
         .sub_registry_with_label((Cow::Borrowed("topic"), Cow::from(update_slot_topic.clone())));
 
     registry_with_label.register(
-        "queue_len",
+        "neon_filter_queue_len",
         "How many UpdateSlot messages queued up for processing",
         stats.queue_len_update_slot.clone(),
     );
@@ -90,7 +90,7 @@ pub async fn start_prometheus(
     ));
 
     registry_with_label.register(
-        "queue_len",
+        "neon_filter_queue_len",
         "How many NotifyTransaction messages queued up for processing",
         stats.queue_len_notify_transaction.clone(),
     );
@@ -101,7 +101,7 @@ pub async fn start_prometheus(
     ));
 
     registry_with_label.register(
-        "queue_len",
+        "neon_filter_queue_len",
         "How many NotifyBlock messages queued up for processing",
         stats.queue_len_notify_block.clone(),
     );
@@ -110,7 +110,7 @@ pub async fn start_prometheus(
         registry.sub_registry_with_label((Cow::Borrowed("topic"), Cow::from(update_account_topic)));
 
     registry_with_label.register(
-        "kafka_messages_received",
+        "neon_filter_kafka_messages_received",
         "How many UpdateAccount messages have been received",
         stats.kafka_update_account.clone(),
     );
@@ -119,7 +119,7 @@ pub async fn start_prometheus(
         registry.sub_registry_with_label((Cow::Borrowed("topic"), Cow::from(update_slot_topic)));
 
     registry_with_label.register(
-        "kafka_messages_received",
+        "neon_filter_kafka_messages_received",
         "How many UpdateSlot messages have been received",
         stats.kafka_update_slot.clone(),
     );
@@ -128,7 +128,7 @@ pub async fn start_prometheus(
         .sub_registry_with_label((Cow::Borrowed("topic"), Cow::from(notify_transaction_topic)));
 
     registry_with_label.register(
-        "kafka_messages_received",
+        "neon_filter_kafka_messages_received",
         "How many NotifyTransaction messages have been received",
         stats.kafka_notify_transaction.clone(),
     );
@@ -137,7 +137,7 @@ pub async fn start_prometheus(
         registry.sub_registry_with_label((Cow::Borrowed("topic"), Cow::from(notify_block_topic)));
 
     registry_with_label.register(
-        "kafka_messages_received",
+        "neon_filter_kafka_messages_received",
         "How many NotifyBlock messages have been received",
         stats.kafka_notify_block.clone(),
     );
