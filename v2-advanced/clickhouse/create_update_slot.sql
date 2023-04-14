@@ -3,13 +3,13 @@ CREATE DATABASE IF NOT EXISTS events ON CLUSTER 'events';
 CREATE TABLE IF NOT EXISTS events.update_slot ON CLUSTER '{cluster}' (
     slot UInt64 CODEC(DoubleDelta, ZSTD),
     parent Nullable(UInt64) default 0 CODEC(DoubleDelta, ZSTD),
-    slot_status Enum('Processed' = 1,  'Confirmed' = 2, 'Rooted' = 3) CODEC(DoubleDelta, ZSTD),
+    status Enum('Processed' = 1,  'Confirmed' = 2, 'Rooted' = 3) CODEC(DoubleDelta, ZSTD),
     retrieved_time DateTime64 CODEC(DoubleDelta, ZSTD)
 ) ENGINE = ReplicatedMergeTree(
     '/clickhouse/tables/update_slot',
     '{replica}'
-) PRIMARY KEY(slot, slot_status)
-ORDER BY (slot, slot_status)
+) PRIMARY KEY(slot, status)
+ORDER BY (slot, status)
 SETTINGS index_granularity=8192;
 
 CREATE TABLE IF NOT EXISTS events.update_slot_queue ON CLUSTER '{cluster}' (
@@ -27,6 +27,6 @@ kafka_format = 'JSONEachRow';
 CREATE MATERIALIZED VIEW IF NOT EXISTS events.update_slot_queue_mv ON CLUSTER '{cluster}' to events.update_slot AS
 SELECT slot,
     parent,
-    slot_status,
+    status,
     retrieved_time
 FROM events.update_slot_queue;
