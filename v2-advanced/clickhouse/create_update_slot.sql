@@ -3,7 +3,7 @@ CREATE DATABASE IF NOT EXISTS events ON CLUSTER 'events';
 CREATE TABLE IF NOT EXISTS events.update_slot ON CLUSTER '{cluster}' (
     slot UInt64 CODEC(DoubleDelta, ZSTD),
     parent Nullable(UInt64) default 0 CODEC(DoubleDelta, ZSTD),
-    status Enum('Processed' = 1,  'Confirmed' = 2, 'Rooted' = 3) CODEC(DoubleDelta, ZSTD),
+    status Enum('Confirmed' = 1, 'Processed' = 2, 'Rooted' = 3) CODEC(DoubleDelta, ZSTD),
     retrieved_time DateTime64 CODEC(DoubleDelta, ZSTD)
 ) ENGINE = ReplicatedMergeTree(
     '/clickhouse/tables/update_slot',
@@ -15,7 +15,7 @@ SETTINGS index_granularity=8192;
 CREATE TABLE IF NOT EXISTS events.update_slot_queue ON CLUSTER '{cluster}' (
     slot UInt64,
     parent Nullable(UInt64) default 0,
-    slot_status Enum('Processed' = 1,  'Confirmed' = 2, 'Rooted' = 3),
+    status Enum('Confirmed' = 1, 'Processed' = 2, 'Rooted' = 3),
     retrieved_time DateTime64 DEFAULT now64()
 ) ENGINE = Kafka SETTINGS kafka_broker_list = 'kafka:29092',
 kafka_topic_list = 'update_slot',
