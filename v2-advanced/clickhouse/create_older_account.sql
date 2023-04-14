@@ -11,12 +11,11 @@ CREATE TABLE IF NOT EXISTS events.older_account_local ON CLUSTER '{cluster}' (
     txn_signature Array(Nullable(UInt8)) CODEC(ZSTD),
     slot UInt64 CODEC(DoubleDelta, ZSTD),
     is_startup Bool CODEC(ZSTD),
-    retrieved_time DateTime64 CODEC(DoubleDelta, ZSTD),
-    retention_counter UInt64 CODEC(DoubleDelta, ZSTD)
+    retrieved_time DateTime64 CODEC(DoubleDelta, ZSTD)
 ) ENGINE = ReplicatedReplacingMergeTree(
     '/clickhouse/tables/{shard}/older_account_local',
     '{replica}',
-    retention_counter
+    slot
 ) PRIMARY KEY (pubkey)
 ORDER BY (pubkey)
 SETTINGS index_granularity=8192;
