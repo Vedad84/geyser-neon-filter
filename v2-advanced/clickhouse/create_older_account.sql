@@ -22,5 +22,5 @@ ORDER BY (pubkey)
 SETTINGS index_granularity=8192;
 
 
-CREATE TABLE IF NOT EXISTS events.older_account_distributed ON CLUSTER '{cluster}' AS events.update_account_local
+CREATE TABLE IF NOT EXISTS events.older_account_distributed ON CLUSTER '{cluster}' AS events.older_account_local
     ENGINE = Distributed('{cluster}', events, older_account_local, xxHash64(CONCAT(toString(slot), arrayStringConcat(txn_signature,''))));
