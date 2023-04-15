@@ -1,5 +1,5 @@
--- update_account_local, notify_transaction_local and older_account_local are guaranteed to
--- contain data for the same transaction_sig + slot in a single shard (see sharding keys for distributed tables)
+-- update_account_local and older_account_local are guaranteed to
+-- contain data for the same pubkeys in a single shard (see sharding keys for distributed tables)
 -- Therefore next operation will not produce inter-node traffic
 
 INSERT INTO events.older_account_distributed

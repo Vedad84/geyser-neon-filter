@@ -22,7 +22,7 @@ SETTINGS index_granularity=8192;
 
 
 CREATE TABLE IF NOT EXISTS events.update_account_distributed ON CLUSTER '{cluster}' AS events.update_account_local
-ENGINE = Distributed('{cluster}', events, update_account_local, xxHash64(CONCAT(toString(slot), arrayStringConcat(txn_signature,''))));
+ENGINE = Distributed('{cluster}', events, update_account_local, xxHash64(arrayStringConcat(pubkey,'')));
 
 CREATE TABLE IF NOT EXISTS events.update_account_queue ON CLUSTER '{cluster}' (
     pubkey Array(UInt8),
