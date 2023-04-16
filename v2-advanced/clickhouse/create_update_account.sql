@@ -15,9 +15,9 @@ CREATE TABLE IF NOT EXISTS events.update_account_local ON CLUSTER '{cluster}' (
 ) ENGINE = ReplicatedMergeTree(
     '/clickhouse/tables/{shard}/update_account_local',
     '{replica}'
-) PRIMARY KEY (pubkey, slot, write_version)
+) PRIMARY KEY (slot, write_version, pubkey)
 PARTITION BY toInt32(slot / 216000)
-ORDER BY (pubkey, slot, write_version)
+ORDER BY (slot, write_version, pubkey)
 SETTINGS index_granularity=8192;
 
 

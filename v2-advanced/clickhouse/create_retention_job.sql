@@ -21,6 +21,6 @@ ON us.slot = ual.slot AND us.status = 'Rooted'
 WHERE
     ual.slot > (SELECT MAX(oal.slot) FROM events.older_account_distributed oal)
     AND ual.slot <= (SELECT MAX(usd.slot) - 6480000 FROM events.update_slot usd)
-ORDER BY ual.pubkey DESC, ual.slot DESC, ual.write_version DESC;
+ORDER BY ual.slot DESC, ual.write_version DESC;
 
 OPTIMIZE TABLE events.older_account_local ON CLUSTER '{cluster}' DEDUPLICATE;
