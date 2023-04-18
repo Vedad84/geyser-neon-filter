@@ -7,22 +7,23 @@ CREATE TABLE IF NOT EXISTS events.update_account_local ON CLUSTER '{cluster}' (
     executable Bool CODEC(ZSTD),
     rent_epoch UInt64 CODEC(DoubleDelta, ZSTD),
     data Array(UInt8) CODEC(ZSTD),
-    write_version UInt64 CODEC(DoubleDelta, ZSTD),
+    write_version Int64 CODEC(DoubleDelta, ZSTD),
     txn_signature Array(Nullable(UInt8)) CODEC(ZSTD),
     slot UInt64 CODEC(DoubleDelta, ZSTD),
     is_startup Bool CODEC(ZSTD),
     retrieved_time DateTime64 CODEC(DoubleDelta, ZSTD)
-) ENGINE = ReplicatedMergeTree(
+) ENGINE = ReplicatedReplacingMergeTree(
     '/clickhouse/tables/{shard}/update_account_local',
-    '{replica}'
-) PRIMARY KEY (pubkey, slot, write_version)
-PARTITION BY toYYYYMMDD(retrieved_time)
-ORDER BY (pubkey, slot, write_version)
+    '{replica}',
+    retrieved_time
+) PRIMARY KEY (slot, pubkey, write_version)
+PARTITION BY toInt32(slot / 216000)
+ORDER BY (slot, pubkey, write_version)
 SETTINGS index_granularity=8192;
 
 
 CREATE TABLE IF NOT EXISTS events.update_account_distributed ON CLUSTER '{cluster}' AS events.update_account_local
-ENGINE = Distributed('{cluster}', events, update_account_local, xxHash64(CONCAT(toString(slot), arrayStringConcat(txn_signature,''))));
+ENGINE = Distributed('{cluster}', events, update_account_local, slot);
 
 CREATE TABLE IF NOT EXISTS events.update_account_queue ON CLUSTER '{cluster}' (
     pubkey Array(UInt8),
@@ -31,7 +32,7 @@ CREATE TABLE IF NOT EXISTS events.update_account_queue ON CLUSTER '{cluster}' (
     executable Bool,
     rent_epoch UInt64,
     data Array(UInt8),
-    write_version UInt64,
+    write_version Int64,
     txn_signature Array(Nullable(UInt8)),
     slot UInt64,
     is_startup Bool,
@@ -55,4 +56,20 @@ AS  SELECT pubkey,
            slot,
            is_startup,
            retrieved_time
-FROM events.update_account_queue;
+FROM events.update_account_queue
+WHERE is_startup = FALSE;
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS events.older_account_queue_mv ON CLUSTER '{cluster}' to events.older_account_distributed
+AS  SELECT pubkey,
+           lamports,
+           owner,
+           executable,
+           rent_epoch,
+           data,
+           write_version,
+           txn_signature,
+           slot,
+           is_startup,
+           retrieved_time
+FROM events.update_account_queue
+WHERE is_startup = TRUE;

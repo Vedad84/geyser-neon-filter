@@ -182,7 +182,7 @@ pub async fn fetch_update_account(
 
 pub async fn fetch_update_slot(client: &Client, slot: u64) -> Result<UpdateSlot> {
     let query = "SELECT slot, parent, slot_status, retrieved_time
-    FROM events.update_slot_distributed
+    FROM events.update_slot
     WHERE slot = ?
     ";
     client

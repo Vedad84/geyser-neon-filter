@@ -26,12 +26,12 @@ SELECT 'local_event_row_count' AS name,
     'gauge' AS type
 FROM events.update_account_local
 UNION ALL
-SELECT 'local_event_row_count' AS name,
+SELECT 'event_row_count' AS name,
     toFloat64(COUNT(*)) AS value,
     'Number of rows in the table' AS help,
-    map('hostname', hostName(), 'table', 'update_slot_local') AS labels,
+    map('hostname', hostName(), 'table', 'update_slot') AS labels,
     'gauge' AS type
-FROM events.update_slot_local
+FROM events.update_slot
 --- Distributed
 UNION ALL
 SELECT 'event_row_count' AS name,
@@ -54,13 +54,6 @@ SELECT 'event_row_count' AS name,
     map('hostname', hostName(), 'table', 'update_account_distributed') AS labels,
     'gauge' AS type
 FROM events.update_account_distributed
-UNION ALL
-SELECT 'event_row_count' AS name,
-    toFloat64(COUNT(*)) AS value,
-    'Number of rows in the table' AS help,
-    map('hostname', hostName(), 'table', 'update_slot_distributed') AS labels,
-    'gauge' AS type
-FROM events.update_slot_distributed
 UNION ALL
 --- Clickhouse stats
 SELECT 'clickhouse_select_query' as name,
@@ -222,10 +215,10 @@ UNION ALL
 SELECT 'table_compressed_size_gbytes' AS name,
     toFloat64(SUM(data_compressed_bytes) / (1024 * 1024 * 1024)) AS value,
     'Compressed table size in gigabytes' AS help,
-    map('hostname', hostName(), 'table', 'update_slot_local') AS labels,
+    map('hostname', hostName(), 'table', 'update_slot') AS labels,
     'gauge' AS type
 FROM system.parts
-WHERE active = 1 AND table = 'update_slot_local'
+WHERE active = 1 AND table = 'update_slot'
 GROUP BY table
 ---
 UNION ALL
@@ -233,9 +226,9 @@ UNION ALL
 SELECT 'table_uncompressed_size_gbytes' AS name,
     toFloat64(SUM(data_uncompressed_bytes) / (1024 * 1024 * 1024)) AS value,
     'Uncompressed table size in gigabytes' AS help,
-    map('hostname', hostName(), 'table', 'update_slot_local') AS labels,
+    map('hostname', hostName(), 'table', 'update_slot') AS labels,
     'gauge' AS type
 FROM system.parts
-WHERE active = 1 AND table = 'update_slot_local'
+WHERE active = 1 AND table = 'update_slot'
 GROUP BY table
 ORDER BY name ASC;
