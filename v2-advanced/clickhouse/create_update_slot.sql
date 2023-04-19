@@ -5,9 +5,10 @@ CREATE TABLE IF NOT EXISTS events.update_slot ON CLUSTER '{cluster}' (
     parent Nullable(UInt64) default 0 CODEC(DoubleDelta, ZSTD),
     status Enum('Confirmed' = 1, 'Processed' = 2, 'Rooted' = 3) CODEC(DoubleDelta, ZSTD),
     retrieved_time DateTime64 CODEC(DoubleDelta, ZSTD)
-) ENGINE = ReplicatedMergeTree(
+) ENGINE = ReplicatedReplacingMergeTree(
     '/clickhouse/tables/update_slot',
-    '{replica}'
+    '{replica}',
+    retrieved_time
 ) PRIMARY KEY(slot, status)
 ORDER BY (slot, status)
 SETTINGS index_granularity=8192;
