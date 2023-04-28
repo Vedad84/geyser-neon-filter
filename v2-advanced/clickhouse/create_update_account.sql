@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS events.update_account_queue ON CLUSTER '{cluster}' (
     txn_signature Array(Nullable(UInt8)),
     slot UInt64,
     is_startup Bool,
-    retrieved_time DateTime64 DEFAULT now64()
+    retrieved_time DateTime64
 )   ENGINE = Kafka SETTINGS
     kafka_broker_list = 'kafka:29092',
     kafka_topic_list = 'update_account',
