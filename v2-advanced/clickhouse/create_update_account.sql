@@ -16,9 +16,9 @@ CREATE TABLE IF NOT EXISTS events.update_account_local ON CLUSTER '{cluster}' (
     '/clickhouse/tables/{shard}/update_account_local',
     '{replica}',
     retrieved_time
-) PRIMARY KEY (slot, pubkey, write_version)
+) PRIMARY KEY (pubkey, slot, write_version)
 PARTITION BY toInt32(slot / 216000)
-ORDER BY (slot, pubkey, write_version)
+ORDER BY (pubkey, slot, write_version)
 SETTINGS index_granularity=8192;
 
 
