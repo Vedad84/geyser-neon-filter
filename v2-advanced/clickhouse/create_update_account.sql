@@ -42,6 +42,8 @@ CREATE TABLE IF NOT EXISTS events.update_account_queue ON CLUSTER '{cluster}' (
     kafka_topic_list = 'update_account',
     kafka_group_name = 'clickhouse',
     kafka_num_consumers = 1,
+    kafka_poll_timeout_ms = 200,
+    kafka_flush_interval_ms = 1000,
     kafka_format = 'JSONEachRow';
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS events.update_account_queue_mv ON CLUSTER '{cluster}' to events.update_account_distributed

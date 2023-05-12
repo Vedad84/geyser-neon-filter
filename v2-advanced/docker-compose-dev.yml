@@ -9,7 +9,7 @@ networks:
           gateway: 10.1.0.1
 
 x-clickhouse-common: &clickhouse-common
-  image: docker.io/clickhouse/clickhouse-server:23.2.4.12-alpine
+  image: docker.io/clickhouse/clickhouse-server:23.3.1-alpine
   ulimits:
     nproc: 65535
     nofile:

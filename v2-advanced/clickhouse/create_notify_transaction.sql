@@ -25,6 +25,8 @@ CREATE TABLE IF NOT EXISTS events.notify_transaction_queue ON CLUSTER '{cluster}
     kafka_topic_list = 'notify_transaction',
     kafka_group_name = 'clickhouse',
     kafka_num_consumers = 1,
+    kafka_poll_timeout_ms = 200,
+    kafka_flush_interval_ms = 1000,
     kafka_format = 'JSONAsString';
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS events.notify_transaction_queue_mv ON CLUSTER '{cluster}' TO events.notify_transaction_distributed AS
