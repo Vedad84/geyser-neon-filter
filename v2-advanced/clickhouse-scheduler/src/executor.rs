@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Result};
 use clickhouse::Client;
 use log::{error, info};
+use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -42,7 +43,7 @@ impl<'a, E> BackoffStrategy<'a, E> for ShutdownBackoff {
     }
 }
 
-async fn execute_interval(
+async fn execute_task(
     clients: Arc<Vec<Client>>,
     task: &Task,
     retries: u32,
@@ -95,7 +96,7 @@ pub async fn add_tasks(
     sched: &mut JobScheduler,
     config: Arc<Config>,
     shutdown: Receiver<()>,
-    _task_metrics: Vec<TaskMetric>,
+    task_metrics: Vec<TaskMetric>,
 ) {
     let retries = config.http_settings.retries;
     let retry_delay = config.http_settings.retry_delay;
@@ -106,13 +107,14 @@ pub async fn add_tasks(
     };
     let clients = Arc::new(ClickHouse::from_config(config.clone()));
 
-    for task in config.tasks.iter().cloned() {
+    for (task, metric) in config.tasks.iter().cloned().zip(task_metrics) {
         let task = Arc::new(task);
         let task_cron = task.cron.clone();
         let task_shutdown = shutdown.clone();
         let shutdown_backoff = shutdown_backoff.clone();
         let clients = clients.clone();
         let should_stop = Arc::clone(&should_stop);
+        let metric = Arc::new(metric);
 
         sched
             .add(
@@ -122,18 +124,29 @@ pub async fn add_tasks(
                     let shutdown_backoff = shutdown_backoff.clone();
                     let clients = Arc::clone(&clients);
                     let should_stop = Arc::clone(&should_stop);
+                    let mut measurement_queue: VecDeque<f64> = VecDeque::from(vec![0_f64; task.average_depth]);
+                    let metric = Arc::clone(&metric);
 
                     Box::pin(async move {
                         info!("Starting task execution: {}", task.task_name);
                         tokio::select! {
-                            _execution_time = execute_interval(
+                            execution_time = execute_task(
                                 clients,
                                 &task,
                                 retries,
                                 shutdown_backoff,
                                 task_shutdown.clone(),
                             ) => {
-                                // Use execution_time for metrics
+                                if let Some(execution_time) = execution_time {
+                                    measurement_queue.push_back(execution_time);
+                                    measurement_queue.pop_front();
+                                    metric.avg_time.set(measurement_queue.iter().sum::<f64>() / measurement_queue.len() as f64);
+                                    metric.min_time.set(*measurement_queue.iter().min_by( |a, b| a.total_cmp(b)).unwrap_or(&0_f64));
+                                    metric.max_time.set(*measurement_queue.iter().max_by( |a, b| a.total_cmp(b)).unwrap_or(&0_f64));
+                                 }
+                                else {
+                                    metric.errors.inc();
+                                }
                             }
                             _ = task_shutdown.changed() => {
                                 should_stop.store(true, Ordering::SeqCst);
