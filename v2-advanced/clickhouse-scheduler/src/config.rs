@@ -59,7 +59,6 @@ pub struct Config {
 pub struct Task {
     pub task_name: String,
     pub queries: Vec<String>,
-    #[serde(with = "humantime_serde")]
-    pub task_interval: Duration,
+    pub cron: String,
     pub average_depth: usize,
 }

@@ -1,10 +1,12 @@
+use std::sync::Arc;
+
 use hyper::client::HttpConnector;
 
 use crate::config::Config;
 
 pub struct ClickHouse;
 
-fn build_client(config: &Config) -> hyper::Client<HttpConnector> {
+fn build_client(config: Arc<Config>) -> hyper::Client<HttpConnector> {
     let mut http_connector = HttpConnector::new();
     http_connector.set_keepalive(Some(config.http_settings.keepalive));
     http_connector.set_nodelay(config.http_settings.no_delay);
@@ -21,13 +23,13 @@ fn build_client(config: &Config) -> hyper::Client<HttpConnector> {
 }
 
 impl ClickHouse {
-    pub fn from_config(config: &Config) -> Vec<clickhouse::Client> {
+    pub fn from_config(config: Arc<Config>) -> Vec<clickhouse::Client> {
         let mut servers: Vec<clickhouse::Client> = vec![];
 
         for i in config.servers.iter() {
             let username = config.username.clone();
             let password = config.password.clone();
-            let http_client = build_client(config);
+            let http_client = build_client(config.clone());
 
             let ch_client = match (config.username.is_empty(), config.password.is_empty()) {
                 (false, false) => clickhouse::Client::with_http_client(http_client).with_url(i),

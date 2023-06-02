@@ -23,7 +23,7 @@
                 "SELECT 1*1;",
                 "SELECT 2*1;"
             ],
-            "task_interval": "1m",
+            "cron": "0 0/2 * 1/1 * ? *",
             "average_depth": 30
         },
         {
@@ -33,7 +33,15 @@
                 "SELECT 2+1;",
                 "SELECT 3+1;"
             ],
-            "task_interval": "3s",
+            "cron": "0 0/2 * 1/1 * ? *",
+            "average_depth": 30
+        },
+        {
+            "task_name": "cron_one_query",
+            "queries": [
+                "SELECT 1+1;"
+            ],
+            "cron": "0 0/1 * 1/1 * ? *",
             "average_depth": 30
         }
     ],
