@@ -3,17 +3,22 @@ use std::{
     io,
     net::{IpAddr, Ipv4Addr, SocketAddr},
     pin::Pin,
-    sync::{Arc, atomic::{AtomicU64}},
+    sync::{atomic::AtomicU64, Arc},
 };
 
 use hyper::{
+    server::Server,
     service::{make_service_fn, service_fn},
-    Body, Request, Response, server::Server,
+    Body, Request, Response,
 };
 
-use prometheus_client::{encoding::text::encode, registry::Registry, metrics::{gauge::Gauge ,counter::Counter}};
-use tokio::sync::oneshot;
 use log::info;
+use prometheus_client::{
+    encoding::text::encode,
+    metrics::{counter::Counter, gauge::Gauge},
+    registry::Registry,
+};
+use tokio::sync::oneshot;
 
 #[derive(Default, Clone)]
 pub struct TaskMetric {
@@ -31,7 +36,8 @@ pub async fn start_prometheus(
 ) {
     let mut registry = <Registry>::default();
 
-    task_names.iter()
+    task_names
+        .iter()
         .zip(task_metrics)
         .for_each(|(name, metric)| {
             let min_time_name = format!("{name}_min_time");
@@ -49,8 +55,11 @@ pub async fn start_prometheus(
     start_metrics_server(metrics_addr, registry, shutdown_rx).await
 }
 
-async fn start_metrics_server(metrics_addr: SocketAddr, registry: Registry, rx_term: oneshot::Receiver<()>) {
-
+async fn start_metrics_server(
+    metrics_addr: SocketAddr,
+    registry: Registry,
+    rx_term: oneshot::Receiver<()>,
+) {
     println!("Starting metrics server on {metrics_addr}");
 
     let registry = Arc::new(registry);
