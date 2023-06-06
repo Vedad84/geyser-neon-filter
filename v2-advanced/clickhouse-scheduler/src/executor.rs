@@ -17,7 +17,24 @@ use crate::prometheus::TaskMetric;
 
 async fn execute_queries(client: &Client, task: &Task) -> Result<()> {
     for q in task.queries.iter() {
-        if let Err(e) = client.query(q).execute().await {
+        if task.select_execute_result {
+            match client.query(q).fetch_one::<String>().await {
+                Ok(s) => {
+                    if let Err(e) = client.query(&s).execute().await {
+                        error!(
+                            "Error executing select result as query: {}, error: {}",
+                            q, e
+                        );
+                        return Err(e.into());
+                    }
+                    info!("Successfully executed generated SQL query: {}", s);
+                }
+                Err(e) => {
+                    error!("Error executing query: {}, error: {}", q, e);
+                    return Err(e.into());
+                }
+            }
+        } else if let Err(e) = client.query(q).execute().await {
             error!("Error executing query: {}, error: {}", q, e);
             return Err(e.into());
         }

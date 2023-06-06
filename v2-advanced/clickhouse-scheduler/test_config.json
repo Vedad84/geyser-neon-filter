@@ -11,8 +11,7 @@
     "log_level": "Info",
     "log_path": "/var/log/neon/scheduler.log",
     "servers": [
-        "http://10.1.0.2:8123",
-        "http://10.1.0.3:8123"
+        "http://127.0.0.1:8123"
     ],
     "username": "",
     "password": "",
@@ -24,7 +23,8 @@
                 "SELECT 2*1;"
             ],
             "cron": "0 0/2 * 1/1 * ? *",
-            "average_depth": 30
+            "average_depth": 30,
+            "select_execute_result": false
         },
         {
             "task_name": "three_sum_queries",
@@ -34,7 +34,8 @@
                 "SELECT 3+1;"
             ],
             "cron": "0 0/2 * 1/1 * ? *",
-            "average_depth": 30
+            "average_depth": 30,
+            "select_execute_result": false
         },
         {
             "task_name": "cron_one_query",
@@ -42,7 +43,17 @@
                 "SELECT 1+1;"
             ],
             "cron": "0 0/1 * 1/1 * ? *",
-            "average_depth": 30
+            "average_depth": 30,
+            "select_execute_result": false
+        },
+        {
+            "task_name": "optimize_table",
+            "queries": [
+                "SELECT CONCAT('OPTIMIZE TABLE events.', table, ' PARTITION ', partition_id) FROM system.parts WHERE (database = 'events') AND (table = 'update_account_local') GROUP BY table, partition_id ORDER BY table, partition_id DESC LIMIT 1, 1"
+            ],
+            "cron": "0 0 0 * * ?",
+            "average_depth": 30,
+            "select_execute_result": true
         }
     ],
     "prometheus_port": "9090"
