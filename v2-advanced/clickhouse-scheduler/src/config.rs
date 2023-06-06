@@ -61,4 +61,5 @@ pub struct Task {
     pub queries: Vec<String>,
     pub cron: String,
     pub average_depth: usize,
+    pub select_execute_result: bool,
 }
