@@ -14,8 +14,7 @@ CREATE TABLE IF NOT EXISTS events.update_account_local ON CLUSTER '{cluster}' (
     retrieved_time DateTime64 CODEC(DoubleDelta, ZSTD)
 ) ENGINE = ReplicatedReplacingMergeTree(
     '/clickhouse/tables/{shard}/update_account_local',
-    '{replica}',
-    retrieved_time
+    '{replica}'
 ) PRIMARY KEY (pubkey, slot, write_version)
 PARTITION BY toInt32(slot / 216000)
 ORDER BY (pubkey, slot, write_version)
@@ -58,20 +57,4 @@ AS  SELECT pubkey,
            slot,
            is_startup,
            retrieved_time
-FROM events.update_account_queue
-WHERE is_startup = FALSE;
-
-CREATE MATERIALIZED VIEW IF NOT EXISTS events.older_account_queue_mv ON CLUSTER '{cluster}' to events.older_account_distributed
-AS  SELECT pubkey,
-           lamports,
-           owner,
-           executable,
-           rent_epoch,
-           data,
-           write_version,
-           txn_signature,
-           slot,
-           is_startup,
-           retrieved_time
-FROM events.update_account_queue
-WHERE is_startup = TRUE;
+FROM events.update_account_queue;

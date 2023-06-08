@@ -7,8 +7,7 @@ CREATE TABLE IF NOT EXISTS events.update_slot ON CLUSTER '{cluster}' (
     retrieved_time DateTime64 CODEC(DoubleDelta, ZSTD)
 ) ENGINE = ReplicatedReplacingMergeTree(
     '/clickhouse/tables/update_slot',
-    '{replica}',
-    retrieved_time
+    '{replica}'
 ) PRIMARY KEY(slot, status)
 ORDER BY (slot, status)
 SETTINGS index_granularity=8192;

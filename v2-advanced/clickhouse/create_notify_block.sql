@@ -5,13 +5,12 @@ CREATE TABLE IF NOT EXISTS events.notify_block_local ON CLUSTER '{cluster}' (
     hash String CODEC(ZSTD(5)),
     notify_block_json String CODEC(ZSTD(5)),
     retrieved_time DateTime64 CODEC(DoubleDelta, ZSTD)
-) ENGINE = ReplicatedMergeTree(
+) ENGINE = ReplicatedReplacingMergeTree(
     '/clickhouse/tables/{shard}/notify_block_local',
     '{replica}'
 ) PRIMARY KEY (slot, hash)
 PARTITION BY toYYYYMMDD(retrieved_time)
 ORDER BY (slot, hash)
-TTL toDateTime(retrieved_time) + INTERVAL 60 DAY
 SETTINGS index_granularity=8192;
 
 CREATE TABLE IF NOT EXISTS events.notify_block_distributed ON CLUSTER '{cluster}' AS events.notify_block_local
