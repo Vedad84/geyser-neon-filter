@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS events.update_slot ON CLUSTER '{cluster}' (
     '/clickhouse/tables/update_slot',
     '{replica}'
 ) PRIMARY KEY(slot, status)
+PARTITION BY toInt32(slot / 216000)
 ORDER BY (slot, status)
 SETTINGS index_granularity=8192;
 
