@@ -3,7 +3,7 @@ CREATE DATABASE IF NOT EXISTS events ON CLUSTER 'events';
 CREATE TABLE IF NOT EXISTS events.notify_transaction_local ON CLUSTER '{cluster}' (
     slot UInt64 CODEC(DoubleDelta, ZSTD),
     signature Array(UInt8) CODEC(ZSTD),
-    notify_transaction_json String CODEC(ZSTD(5)),
+    notify_transaction_json String CODEC(ZSTD(10)),
     retrieved_time DateTime64 CODEC(DoubleDelta, ZSTD),
     idx UInt64 CODEC(DoubleDelta, ZSTD)
 ) ENGINE = ReplicatedReplacingMergeTree(

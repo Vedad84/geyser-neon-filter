@@ -49,7 +49,7 @@
         {
             "task_name": "optimize_table_update_account",
             "queries": [
-                "SELECT CONCAT('OPTIMIZE TABLE events.', table, ' ON CLUSTER events PARTITION ', partition_id, ' DEDUPLICATE') FROM system.parts WHERE (database = 'events') AND (table = 'update_account_local') GROUP BY table, partition_id ORDER BY table, partition_id DESC LIMIT 1, 1"
+                "SELECT CONCAT('OPTIMIZE TABLE events.', table, ' ON CLUSTER events PARTITION ', partition_id, ' DEDUPLICATE', ' BY pubkey, slot, write_version') FROM system.parts WHERE (database = 'events') AND (table = 'update_account_local') GROUP BY table, partition_id ORDER BY table, partition_id DESC LIMIT 1, 1"
             ],
             "cron": "0 0 1 * * ?",
             "average_depth": 30,
@@ -58,7 +58,7 @@
         {
             "task_name": "optimize_table_notify_transaction",
             "queries": [
-                "SELECT CONCAT('OPTIMIZE TABLE events.', table, ' ON CLUSTER events PARTITION ', partition_id, ' DEDUPLICATE') FROM system.parts WHERE (database = 'events') AND (table = 'notify_transaction_local') GROUP BY table, partition_id ORDER BY table, partition_id DESC LIMIT 1, 1"
+                "SELECT CONCAT('OPTIMIZE TABLE events.', table, ' ON CLUSTER events PARTITION ', partition_id, ' DEDUPLICATE', ' BY signature, slot') FROM system.parts WHERE (database = 'events') AND (table = 'notify_transaction_local') GROUP BY table, partition_id ORDER BY table, partition_id DESC LIMIT 1, 1"
             ],
             "cron": "0 0 1 * * ?",
             "average_depth": 30,
@@ -67,7 +67,7 @@
         {
             "task_name": "optimize_table_notify_block",
             "queries": [
-                "SELECT CONCAT('OPTIMIZE TABLE events.', table, ' ON CLUSTER events PARTITION ', partition_id, ' DEDUPLICATE') FROM system.parts WHERE (database = 'events') AND (table = 'notify_block_local') GROUP BY table, partition_id ORDER BY table, partition_id DESC LIMIT 1, 1"
+                "SELECT CONCAT('OPTIMIZE TABLE events.', table, ' ON CLUSTER events PARTITION ', partition_id, ' DEDUPLICATE', ' BY slot, hash') FROM system.parts WHERE (database = 'events') AND (table = 'notify_block_local') GROUP BY table, partition_id ORDER BY table, partition_id DESC LIMIT 1, 1"
             ],
             "cron": "0 0 1 * * ?",
             "average_depth": 30,
