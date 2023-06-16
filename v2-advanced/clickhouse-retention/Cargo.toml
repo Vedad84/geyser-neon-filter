@@ -1,0 +1,17 @@
+[package]
+name = "clickhouse-retention"
+version = "1.0.0"
+edition = "2021"
+description = "Clickhouse retention"
+authors = ["NeonLabs Maintainers <maintainers@neonlabs.org>"]
+
+[dependencies]
+clap = "2.33.3"
+serde = { version = "1.0", features = ["derive"] }
+tokio = { version = "1.28.2", features = ["full"] }
+clickhouse = {version = "0.11.4", features = ["time"]}
+rand = "0.8.5"
+time = {version = "0.3.22", features = ["serde"]}
+serde_yaml = "0.9.21"
+fast_log = { version = "1.5.54" }
+log = "0.4.17"

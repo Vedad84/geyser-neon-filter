@@ -1,0 +1,6 @@
+clickhouse_url: ["http://localhost:8123"]
+copy_partition_offset: 3
+drop_partition_offset: 10
+log_file_name: "/var/log/neon/retention"
+slot_range_to_task: 24000
+tasks_at_same_time: 3
